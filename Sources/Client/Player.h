@@ -73,6 +73,7 @@ namespace spades {
 			Vector3 position;
 			Vector3 velocity;
 			Vector3 orientation;
+			Vector3 orientationSmoothed;
 			Vector3 eye;
 			PlayerInput input;
 			WeaponInput weapInput;
@@ -97,33 +98,29 @@ namespace spades {
 
 			float lastClimbTime;
 			float lastJumpTime;
+			bool lastJump;
 
 			// tools
 			float nextSpadeTime;
 			float nextDigTime;
 			bool firstDig;
-			float nextGrenadeTime;
 			float nextBlockTime;
-			bool holdingGrenade;
+			float nextGrenadeTime;
+			bool cookingGrenade;
 			float grenadeTime;
 			bool blockCursorActive;
 			bool blockCursorDragging;
 			IntVector3 blockCursorPos;
 			IntVector3 blockCursorDragPos;
 			bool lastSingleBlockBuildSeqDone;
-			float lastReloadingTime;
 
 			bool pendingPlaceBlock;
 			bool pendingRestockBlock;
 			bool canPending;
 			IntVector3 pendingPlaceBlockPos;
 
-			// for local players, completion of reload is notified to client
-			bool reloadingServerSide;
-
 			float respawnTime;
 
-			void RepositionPlayer(const Vector3&);
 			void MoveCorpse(float fsynctics);
 			void MovePlayer(float fsynctics);
 			void BoxClipMove(float fsynctics);
@@ -145,7 +142,7 @@ namespace spades {
 			Weapon& GetWeapon();
 			WeaponType GetWeaponType() { return weaponType; }
 			int GetTeamId() { return teamId; }
-			bool IsTeamMate(Player* p) { return teamId == p->teamId; }
+			bool IsTeammate(Player& p) { return teamId == p.teamId; }
 			bool IsSpectator() { return teamId >= 2; }
 			std::string GetTeamName();
 			std::string GetName();
@@ -185,8 +182,7 @@ namespace spades {
 			bool IsZoomed() { return tool == ToolWeapon && weapInput.secondary; }
 			bool IsWalking() { return input.moveForward || input.moveBackward || input.moveLeft || input.moveRight; }
 
-			bool IsAwaitingReloadCompletion() { return reloadingServerSide; }
-
+			void RepositionPlayer(const Vector3&);
 			void SetPosition(const Vector3&);
 			void SetOrientation(const Vector3&);
 			void SetVelocity(const Vector3&);
@@ -208,14 +204,13 @@ namespace spades {
 			int GetHealth() { return health; }
 
 			Vector3 GetPosition() { return position; }
-			Vector3 GetFront();
+			Vector3 GetFront(bool interpolate = false);
 			Vector3 GetFront2D();
 			Vector3 GetRight();
 			Vector3 GetUp();
 			Vector3 GetEye() { return eye; }
 			Vector3 GetOrigin(); // actually not origin at all!
 			Vector3 GetVelocity() { return velocity; }
-			int GetMoveSteps() { return moveSteps; }
 
 			World& GetWorld() { return world; }
 
@@ -224,6 +219,7 @@ namespace spades {
 				return (velocity.z >= 0.0F && velocity.z < 0.017F) && !airborne;
 			}
 
+			void UpdateSmooth(float dt);
 			void Update(float dt);
 
 			float GetTimeToNextSpade();
@@ -231,19 +227,16 @@ namespace spades {
 			float GetTimeToNextBlock();
 			float GetTimeToNextGrenade();
 
+			float GetGrenadeCookTime();
+			bool IsCookingGrenade() { return tool == ToolGrenade && cookingGrenade; }
+
 			float GetToolPrimaryDelay();
 			float GetToolSecondaryDelay();
-
 			float GetSpadeAnimationProgress();
 			float GetDigAnimationProgress();
 			bool IsFirstDig() const { return firstDig; }
 
-			float GetGrenadeCookTime();
-			bool IsCookingGrenade() { return tool == ToolGrenade && holdingGrenade; }
-
-			float GetWalkAnimationProgress() {
-				return moveDistance * 0.5F + (float)(moveSteps)*0.5F;
-			}
+			float GetWalkAnimationProgress();
 
 			// hit tests
 			HitBoxes GetHitBoxes();
@@ -251,11 +244,12 @@ namespace spades {
 			/** Does approximated ray casting.
 			 * @param dir normalized direction vector.
 			 * @return true if ray may hit the player. */
-			bool RayCastApprox(Vector3 start, Vector3 dir, float tolerance = 5.0F);
+			bool RayCastApprox(Vector3 start, Vector3 dir, float tolerance = 3.0F);
 
 			bool OverlapsWith(const AABB3&);
 			bool OverlapsWithBlock(const IntVector3&);
-			bool Collision3D(IntVector3, float distance = 3.0F);
+			float GetDistanceToBlock(const spades::IntVector3&);
+			bool InBuildRange(const IntVector3&);
 		};
 	} // namespace client
 } // namespace spades

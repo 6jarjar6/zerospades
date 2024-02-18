@@ -81,45 +81,23 @@ namespace spades {
 
 			auto toViewCoord = [&](const Vector3& targPos) {
 				Vector3 targetViewPos;
-				targetViewPos.x = Vector3::Dot(targPos - def.viewOrigin, def.viewAxis[0]);
-				targetViewPos.y = Vector3::Dot(targPos - def.viewOrigin, def.viewAxis[1]);
-				targetViewPos.z = Vector3::Dot(targPos - def.viewOrigin, def.viewAxis[2]);
+				targetViewPos.x = Vector3::Dot(targPos, def.viewAxis[0]);
+				targetViewPos.y = Vector3::Dot(targPos, def.viewAxis[1]);
+				targetViewPos.z = Vector3::Dot(targPos, def.viewAxis[2]);
 				return targetViewPos;
 			};
 
-			auto numPlayers = world->GetNumPlayerSlots();
-
-			// fit FoV to include all possibly hit players
+			// fit FoV to include all bullets
 			float range = 0.2F;
-			for (std::size_t i = 0; i < numPlayers; i++) {
-				auto p = world->GetPlayer(static_cast<unsigned int>(i));
-				if (!p || p == localPlayer)
-					continue;
-				if (!p->IsAlive() || p->IsSpectator())
-					continue;
-
-				Vector3 vc = toViewCoord(p->GetEye());
-				if (vc.GetSquaredLength2D() > FOG_DISTANCE * FOG_DISTANCE)
-					continue;
-				if (vc.z <= 0.0F)
-					continue;
-
-				vc.z = std::max(vc.z, 0.1F);
+			for (const auto& v : bullets) {
+				auto vc = toViewCoord(v - def.viewOrigin);
 
 				const float bodySize = 3.5F;
-				Vector2 view = MakeVector2(vc.x, vc.y);
-				if (fabsf(view.x) > bodySize + 2.5F ||
-				    fabsf(view.y) > bodySize + 2.5F)
+				if (fabsf(vc.x) > bodySize + 2.5F ||
+				    fabsf(vc.y) > bodySize + 2.5F)
 					continue;
 
-				float prange = view.GetChebyshevLength() + bodySize;
-				range = std::max(range, 2.0F * atanf(prange / vc.z));
-			}
-
-			// fit FoV to include all bullets
-			for (const auto& v : bullets) {
-				auto vc = toViewCoord(v + def.viewOrigin);
-				float prange = std::max(fabsf(vc.x), fabsf(vc.y)) * 1.5F;
+				float prange = std::max(fabsf(vc.x), fabsf(vc.y)) + bodySize;
 				range = std::max(range, 2.0F * atanf(prange / vc.z));
 			}
 
@@ -182,25 +160,17 @@ namespace spades {
 				}
 			};
 
-			for (std::size_t i = 0; i < numPlayers; i++) {
+			for (std::size_t i = 0; i < world->GetNumPlayerSlots(); i++) {
 				auto p = world->GetPlayer(static_cast<unsigned int>(i));
 				if (!p || p == localPlayer)
 					continue;
 				if (!p->IsAlive() || p->IsSpectator())
 					continue;
 
-				if (!p->RayCastApprox(def.viewOrigin, def.viewAxis[2]))
-					continue;
-				if ((p->GetEye() - def.viewOrigin).GetSquaredLength2D() > FOG_DISTANCE * FOG_DISTANCE)
-					continue;
-
-				auto hitboxes = p->GetHitBoxes();
 				PlayerHit hit;
-				{
-					auto it = hits.find(static_cast<int>(i));
-					if (it != hits.end())
-						hit = it->second;
-				}
+				auto it = hits.find(static_cast<int>(i));
+				if (it != hits.end())
+					hit = it->second;
 
 				int numHits = 0;
 				numHits += hit.numHeadHits;
@@ -209,10 +179,11 @@ namespace spades {
 					numHits += hit.numLimbHits[j];
 
 				if (numHits > 0) {
-					drawBox(hitboxes.head, getColor(hit.numHeadHits));
-					drawBox(hitboxes.torso, getColor(hit.numTorsoHits));
+					auto hb = p->GetHitBoxes();
+					drawBox(hb.head, getColor(hit.numHeadHits));
+					drawBox(hb.torso, getColor(hit.numTorsoHits));
 					for (int j = 0; j < 3; j++)
-						drawBox(hitboxes.limbs[j], getColor(hit.numLimbHits[j]));
+						drawBox(hb.limbs[j], getColor(hit.numLimbHits[j]));
 				}
 			}
 
@@ -225,7 +196,7 @@ namespace spades {
 				// draw crosshair
 				{
 					float thickness = 1; // (1 for single-pixel hairline)
-					renderer->SetColorAlphaPremultiplied(Vector4(1, 0, 0, 0.9F));
+					renderer->SetColorAlphaPremultiplied(Vector4(1, 1, 1, 1));
 					renderer->DrawImage(nullptr, AABB2(0, size * 0.5F, size, thickness));
 					renderer->DrawImage(nullptr, AABB2(size * 0.5F, 0, thickness, size));
 				}
@@ -234,7 +205,7 @@ namespace spades {
 				{
 					float fov = tanf(def.fovY * 0.5F);
 					for (const auto& v : bullets) {
-						auto vc = toViewCoord(v + def.viewOrigin);
+						auto vc = toViewCoord(v - def.viewOrigin);
 						vc /= vc.z * fov;
 						float x = floorf(size * (0.5F + 0.5F * vc.x));
 						float y = floorf(size * (0.5F - 0.5F * vc.y));

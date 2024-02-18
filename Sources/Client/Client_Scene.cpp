@@ -44,11 +44,12 @@
 
 DEFINE_SPADES_SETTING(cg_fov, "68");
 DEFINE_SPADES_SETTING(cg_horizontalFov, "0");
-DEFINE_SPADES_SETTING(cg_classicZoomedFov, "0");
+DEFINE_SPADES_SETTING(cg_classicZoom, "0");
 DEFINE_SPADES_SETTING(cg_thirdperson, "0");
 DEFINE_SPADES_SETTING(cg_manualFocus, "0");
 DEFINE_SPADES_SETTING(cg_depthOfFieldAmount, "1");
 DEFINE_SPADES_SETTING(cg_shake, "1");
+DEFINE_SPADES_SETTING(cg_playerHitboxes, "1");
 
 SPADES_SETTING(cg_ragdoll);
 SPADES_SETTING(cg_hurtScreenEffects);
@@ -65,7 +66,7 @@ namespace spades {
 			if (!p)
 				return ClientCameraMode::NotJoined;
 
-			if (p->IsAlive() && !p->IsSpectator()) {
+			if (!p->IsSpectator() && p->IsAlive()) {
 				// There exists an alive (non-spectator) local player
 				if (cg_thirdperson && world->GetNumPlayers() <= 1)
 					return ClientCameraMode::ThirdPersonLocal;
@@ -114,16 +115,16 @@ namespace spades {
 		}
 
 		float Client::GetLocalFireVibration() {
-			float localFireVibration = 0.0F;
-			localFireVibration = time - localFireVibrationTime;
-			localFireVibration = 1.0F - localFireVibration / 0.1F;
+			float localFireVibration = time - localFireVibrationTime;
+			localFireVibration = 1.0F - (localFireVibration / 0.1F);
 			if (localFireVibration < 0.0F)
 				localFireVibration = 0.0F;
 			return localFireVibration;
 		}
 
 		float Client::GetAimDownZoomScale() {
-			Player& p = GetCameraTargetPlayer();
+			int playerId = GetCameraTargetPlayerId();
+			Player& p = world->GetPlayer(playerId).value();
 			if (!p.IsAlive() || !p.IsToolWeapon())
 				return 1.0F;
 
@@ -135,10 +136,10 @@ namespace spades {
 				case SHOTGUN_WEAPON: delta = 0.4F; break;
 			}
 
-			if (cg_classicZoomedFov)
+			if (cg_classicZoom)
 				delta = 1.0F;
 
-			float ads = clientPlayers[p.GetId()]->GetAimDownState();
+			float ads = clientPlayers[playerId]->GetAimDownState();
 
 			return 1.0F + (3.0F - 2.0F * powf(ads, 1.5F)) * powf(ads, 3.0F) * delta;
 		}
@@ -201,10 +202,10 @@ namespace spades {
 					}
 					case ClientCameraMode::FirstPersonLocal:
 					case ClientCameraMode::FirstPersonFollow: {
-						Player& p = GetCameraTargetPlayer();
+						int playerId = GetCameraTargetPlayerId();
+						Player& p = world->GetPlayer(playerId).value();
 
-						Matrix4 eyeMatrix = clientPlayers[p.GetId()]->GetEyeMatrix();
-
+						Matrix4 eyeMatrix = clientPlayers[playerId]->GetEyeMatrix();
 						def.viewOrigin = eyeMatrix.GetOrigin();
 						def.viewAxis[0] = -eyeMatrix.GetAxis(0);
 						def.viewAxis[1] = -eyeMatrix.GetAxis(2);
@@ -267,17 +268,14 @@ namespace spades {
 						// Hurt effect
 						if (cg_hurtScreenEffects) {
 							float hpper = p.GetHealth() / 100.0F;
-
-							float wTime = world->GetTime();
-							float timeSinceLastHurt = wTime - lastHurtTime;
-
-							if (wTime >= lastHurtTime && timeSinceLastHurt < 0.15F) {
-								float per = 1.0F - timeSinceLastHurt / 0.15F;
+							float timeSinceLastHurt = time - lastHurtTime;
+							if (time >= lastHurtTime && timeSinceLastHurt < 0.15F) {
+								float per = 1.0F - (timeSinceLastHurt / 0.15F);
 								per *= 0.5F - hpper * 0.3F;
 								def.blurVignette += per * 6.0F;
 							}
-							if (wTime >= lastHurtTime && timeSinceLastHurt < 0.2F) {
-								float per = 1.0F - timeSinceLastHurt / 0.2F;
+							if (time >= lastHurtTime && timeSinceLastHurt < 0.2F) {
+								float per = 1.0F - (timeSinceLastHurt / 0.2F);
 								per *= 0.5F - hpper * 0.3F;
 								def.saturation *= std::max(0.0F, 1.0F - per * 4.0F);
 							}
@@ -290,20 +288,19 @@ namespace spades {
 						freeCameraState.position = def.viewOrigin;
 						freeCameraState.velocity = MakeVector3(0, 0, 0);
 
-						// Update initial floating camera view
-						Vector3 o = def.viewAxis[2];
-						followAndFreeCameraState.yaw = atan2f(o.y, o.x) + DEG2RAD(180);
+						// Update initial floating camera angle
+						Vector3 o = -def.viewAxis[2];
+						followAndFreeCameraState.yaw = atan2f(o.y, o.x);
 						followAndFreeCameraState.pitch = atan2f(o.z, o.GetLength2D());
 						break;
 					}
 					case ClientCameraMode::ThirdPersonLocal:
 					case ClientCameraMode::ThirdPersonFollow: {
-						auto localplayer = world->GetLocalPlayer();
 						Player& player = GetCameraTargetPlayer();
-						Vector3 center = player.GetEye();
 
+						Vector3 center = player.GetEye();
 						if (!player.IsAlive()) {
-							if (cg_ragdoll && lastLocalCorpse && &player == localplayer)
+							if (player.IsLocalPlayer() && lastLocalCorpse && cg_ragdoll)
 								center = lastLocalCorpse->GetCenter();
 
 							center.z -= 2.25F;
@@ -323,9 +320,9 @@ namespace spades {
 						}
 
 						float distance = 5.0F;
-						if (&player == localplayer
-							&& !localplayer->IsSpectator()
-							&& !localplayer->IsAlive()) { // deathcam.
+						if (player.IsLocalPlayer()
+							&& !player.IsSpectator()
+							&& !player.IsAlive()) { // deathcam.
 							float timeSinceDeath = time - lastAliveTime;
 							distance -= 3.0F * expf(-timeSinceDeath * 1.0F);
 						}
@@ -400,35 +397,32 @@ namespace spades {
 				}
 
 				// Add vibration effects
-				{
+				if (shakeLevel >= 1) {
 					float nadeVib = grenadeVibration;
 					if (nadeVib > 0.0F) {
-						if (shakeLevel >= 1) {
-							nadeVib *= 10.0F;
-							if (nadeVib > 1.0F)
-								nadeVib = 1.0F;
-							roll += (SampleRandomFloat() - SampleRandomFloat()) * 0.2F * nadeVib;
-							vibPitch += (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
-							vibYaw += (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
-							scale -= (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
+						nadeVib *= 10.0F;
+						if (nadeVib > 1.0F)
+							nadeVib = 1.0F;
+						roll += (SampleRandomFloat() - SampleRandomFloat()) * 0.2F * nadeVib;
+						vibPitch += (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
+						vibYaw += (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
+						scale -= (SampleRandomFloat() - SampleRandomFloat()) * 0.1F * nadeVib;
 
-							def.radialBlur += nadeVib * 0.1F;
-						}
+						def.radialBlur += nadeVib * 0.1F;
 					}
 				}
-				{
+
+				if (shakeLevel >= 2) {
 					float nadeVib = grenadeVibrationSlow;
 					if (nadeVib > 0.0F) {
-						if (shakeLevel >= 2) {
-							nadeVib *= 4.0F;
-							if (nadeVib > 1.0F)
-								nadeVib = 1.0F;
-							nadeVib *= nadeVib;
+						nadeVib *= 4.0F;
+						if (nadeVib > 1.0F)
+							nadeVib = 1.0F;
+						nadeVib *= nadeVib;
 
-							roll += coherentNoiseSamplers[0].Sample(time * 8.0F) * 0.2F * nadeVib;
-							vibPitch += coherentNoiseSamplers[1].Sample(time * 12.0F) * 0.1F * nadeVib;
-							vibYaw += coherentNoiseSamplers[2].Sample(time * 11.0F) * 0.1F * nadeVib;
-						}
+						roll += coherentNoiseSamplers[0].Sample(time * 8.0F) * 0.2F * nadeVib;
+						vibPitch += coherentNoiseSamplers[1].Sample(time * 12.0F) * 0.1F * nadeVib;
+						vibYaw += coherentNoiseSamplers[2].Sample(time * 11.0F) * 0.1F * nadeVib;
 					}
 				}
 
@@ -487,8 +481,7 @@ namespace spades {
 				def.viewAxis[1] = MakeVector3(0, 0, -1);
 				def.viewAxis[2] = MakeVector3(0, 0, 1);
 
-				def.fovY = fov;
-				def.fovX = 2.0F * atanf(tanf(def.fovY * 0.5F) * ratio);
+				def.fovY = def.fovX = 0.0F;
 
 				def.zNear = 0.05F;
 				def.skipWorld = true;
@@ -516,10 +509,9 @@ namespace spades {
 			position.z -= 0.03F * 3.0F;
 
 			ModelRenderParam param;
-			Matrix4 mat = g.GetOrientation().ToRotationMatrix() * Matrix4::Scale(0.03F);
-			mat = Matrix4::Translate(position) * mat;
-			param.matrix = mat;
-
+			param.matrix = Matrix4::Translate(position);
+			param.matrix = param.matrix * g.GetOrientation().ToRotationMatrix();
+			param.matrix = param.matrix * Matrix4::Scale(0.03F);
 			renderer->RenderModel(*model, param);
 		}
 
@@ -554,12 +546,12 @@ namespace spades {
 		void Client::DrawCTFObjects() {
 			SPADES_MARK_FUNCTION();
 
-			CTFGameMode& mode = dynamic_cast<CTFGameMode&>(world->GetMode().value());
+			CTFGameMode& ctf = dynamic_cast<CTFGameMode&>(world->GetMode().value());
 			Handle<IModel> base = renderer->RegisterModel("Models/MapObjects/CheckPoint.kv6");
 			Handle<IModel> intel = renderer->RegisterModel("Models/MapObjects/Intel.kv6");
 
 			for (int tId = 0; tId < 2; tId++) {
-				CTFGameMode::Team& team = mode.GetTeam(tId);
+				CTFGameMode::Team& team = ctf.GetTeam(tId);
 				IntVector3 col = world->GetTeamColor(tId);
 
 				ModelRenderParam param;
@@ -571,10 +563,10 @@ namespace spades {
 				renderer->RenderModel(*base, param);
 
 				// draw flag
-				if (!mode.GetTeam(1 - tId).hasIntel) {
+				if (!ctf.GetTeam(1 - tId).hasIntel) {
 					param.matrix = Matrix4::Translate(team.flagPos);
+					param.matrix = param.matrix * Matrix4::Rotate(MakeVector3(0, 0, 1), time);
 					param.matrix = param.matrix * Matrix4::Scale(0.1F);
-					param.matrix *= Matrix4::Rotate(MakeVector3(0, 0, 1), time);
 					renderer->RenderModel(*intel, param);
 				}
 			}
@@ -583,14 +575,14 @@ namespace spades {
 		void Client::DrawTCObjects() {
 			SPADES_MARK_FUNCTION();
 
-			TCGameMode& mode = dynamic_cast<TCGameMode&>(world->GetMode().value());
+			TCGameMode& tc = dynamic_cast<TCGameMode&>(world->GetMode().value());
 			Handle<IModel> base = renderer->RegisterModel("Models/MapObjects/CheckPoint.kv6");
 
-			for (int tId = 0; tId < mode.GetNumTerritories(); tId++) {
-				TCGameMode::Territory& t = mode.GetTerritory(tId);
-				IntVector3 col = (t.ownerTeamId == 2)
-					? MakeIntVector3(255, 255, 255)
-					: world->GetTeamColor(t.ownerTeamId);
+			for (int i = 0; i < tc.GetNumTerritories(); i++) {
+				TCGameMode::Territory& t = tc.GetTerritory(i);
+				IntVector3 col = (t.ownerTeamId >= NEUTRAL_TEAM)
+				                   ? MakeIntVector3(255, 255, 255)
+				                   : world->GetTeamColor(t.ownerTeamId);
 
 				ModelRenderParam param;
 				param.customColor = ConvertColorRGB(col);
@@ -621,8 +613,7 @@ namespace spades {
 					AddGrenadeToScene(*nade);
 
 				for (const auto& c : corpses) {
-					if ((c->GetCenter() - lastSceneDef.viewOrigin).GetSquaredLength2D() >
-					    FOG_DISTANCE * FOG_DISTANCE)
+					if ((c->GetCenter() - lastSceneDef.viewOrigin).GetSquaredLength2D() > FOG_DISTANCE_SQ)
 						continue;
 					c->AddToScene();
 				}
@@ -645,22 +636,21 @@ namespace spades {
 						bool blockCursorDragging = p->IsBlockCursorDragging();
 
 						if (blockCursorActive || blockCursorDragging) {
-							std::vector<IntVector3> blocks;
+							std::vector<IntVector3> cells;
 							IntVector3 curPos = p->GetBlockCursorPos();
 							IntVector3 dragPos = p->GetBlockCursorDragPos();
 							if (blockCursorDragging)
-								blocks = world->CubeLine(dragPos, curPos, 64);
+								cells = world->CubeLine(dragPos, curPos, 64);
 							else
-								blocks.push_back(curPos);
+								cells.push_back(curPos);
 
-							int curBlocks = (int)blocks.size();
-
-							bool valid = curBlocks <= p->GetNumBlocks();
+							int blocks = static_cast<int>(cells.size());
+							bool valid = blocks <= p->GetNumBlocks();
 							bool active = blockCursorActive && valid;
 
 							Handle<IModel> curLine = renderer->RegisterModel("Models/MapObjects/BlockCursorLine.kv6");
 
-							for (const auto& v : blocks) {
+							for (const auto& v : cells) {
 								Vector3 const color(
 								  /* R (X) */ 1.0F,
 								  /* G (Y) */ valid ? 1.0F : 0.0F,
@@ -668,7 +658,7 @@ namespace spades {
 								);
 
 								// Hide cursor if needed to stop z-fighting
-								if ((curBlocks > 2) && map->IsSolid(v.x, v.y, v.z))
+								if (blocks > 2 && map->IsSolid(v.x, v.y, v.z))
 									continue;
 
 								ModelRenderParam param;
@@ -691,20 +681,22 @@ namespace spades {
 
 			// draw player hottrack
 			// FIXME: don't use debug line
-			auto hottracked = HotTrackedPlayer();
-			if (hottracked) {
-				Player& player = std::get<0>(*hottracked);
-				hitTag_t tag = std::get<1>(*hottracked);
+			if (cg_playerHitboxes) {
+				auto hottracked = HotTrackedPlayer();
+				if (hottracked) {
+					Player& player = std::get<0>(*hottracked);
+					hitTag_t tag = std::get<1>(*hottracked);
 
-				Vector4 color = ConvertColorRGBA(player.GetColor());
-				Vector4 color2 = MakeVector4(1, 1, 1, 1);
+					Vector4 col = MakeVector4(1, 1, 1, 1);
+					Vector4 col2 = ConvertColorRGBA(player.GetColor());
 
-				Player::HitBoxes hb = player.GetHitBoxes();
-				AddDebugObjectToScene(hb.head, (tag & hit_Head) ? color2 : color);
-				AddDebugObjectToScene(hb.torso, (tag & hit_Torso) ? color2 : color);
-				AddDebugObjectToScene(hb.limbs[0], (tag & hit_Legs) ? color2 : color);
-				AddDebugObjectToScene(hb.limbs[1], (tag & hit_Legs) ? color2 : color);
-				AddDebugObjectToScene(hb.limbs[2], (tag & hit_Arms) ? color2 : color);
+					Player::HitBoxes hb = player.GetHitBoxes();
+					AddDebugObjectToScene(hb.head, (tag & hit_Head) ? col : col2);
+					AddDebugObjectToScene(hb.torso, (tag & hit_Torso) ? col : col2);
+					AddDebugObjectToScene(hb.limbs[0], (tag & hit_Legs) ? col : col2);
+					AddDebugObjectToScene(hb.limbs[1], (tag & hit_Legs) ? col : col2);
+					AddDebugObjectToScene(hb.limbs[2], (tag & hit_Arms) ? col : col2);
+				}
 			}
 
 			renderer->EndScene();
@@ -718,13 +710,13 @@ namespace spades {
 				* lastSceneDef.ToViewMatrix();
 		}
 
-		bool Client::Project(const spades::Vector3& v, spades::Vector3& out) {
-			Vector4 screenHomV = lastViewProjectionScreenMatrix * v;
-			if (screenHomV.z <= 0.0F) {
-				screenHomV.w = 0.001F;
+		bool Client::Project(const spades::Vector3& worldPos, spades::Vector2& scrPos) {
+			Vector4 scrHomV = lastViewProjectionScreenMatrix * worldPos;
+			if (scrHomV.z <= 0.0F) {
+				scrHomV.w = 0.001F;
 				return false;
 			}
-			out = screenHomV.GetXYZ() / screenHomV.w;
+			scrPos = MakeVector2(scrHomV.x, scrHomV.y) / scrHomV.w;
 			return true;
 		}
 	} // namespace client

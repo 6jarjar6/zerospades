@@ -53,15 +53,15 @@ namespace spades {
 			int GetCaptureLimit() { return captureLimit; }
 			void SetCaptureLimit(int v) { captureLimit = v; }
 
-			bool PlayerHasIntel(World& world, Player& player);
+			bool PlayerHasIntel(Player& player);
 
 			/**
-			 * Resets both team score and the holding status of both flags.
+			 * Resets holding status of both flags.
 			 *
-			 * This is what the vanila client does upon receiving a winning
+			 * This is what the vanilla client does upon receiving a winning
 			 * `IntelCapture`.
 			 */
-			void ResetTeamScoreAndIntelHoldingStatus();
+			void ResetIntelHoldingStatus();
 		};
 	} // namespace client
 } // namespace spades

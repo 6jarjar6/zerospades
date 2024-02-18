@@ -32,6 +32,8 @@ using namespace std;
 
 DEFINE_SPADES_SETTING(r_corpseLineCollision, "1");
 
+SPADES_SETTING(cg_defaultPlayerModels);
+
 namespace spades {
 	namespace client {
 		Corpse::Corpse(IRenderer& renderer, GameMap& map, Player& p)
@@ -44,11 +46,16 @@ namespace spades {
 
 			Vector3 o = p.GetFront();
 
-			float yaw = atan2f(o.y, o.x) + DEG2RAD(90);
+			float yaw = atan2f(o.y, o.x) + M_PI_F * 0.5F;
+			float pitch = -atan2f(o.z, o.GetLength2D());
+
+			float armPitch = pitch;
+			if (armPitch < 0.0F)
+				armPitch = std::max(armPitch, -M_PI_F * 0.5F) * 0.9F;
 
 			// lower axis
-			Matrix4 lower = Matrix4::Translate(p.GetOrigin());
-			lower = lower * Matrix4::Rotate(MakeVector3(0, 0, 1), yaw);
+			Matrix4 lower = Matrix4::Translate(p.GetOrigin())
+				* Matrix4::Rotate(MakeVector3(0, 0, 1), yaw);
 
 			Matrix4 torso;
 
@@ -60,12 +67,6 @@ namespace spades {
 				SetNode(Torso2, torso * MakeVector3(-0.4F, -0.15F, 0.1F));
 				SetNode(Torso3, torso * MakeVector3(-0.4F, 0.8F, 0.7F));
 				SetNode(Torso4, torso * MakeVector3(0.4F, 0.8F, 0.7F));
-
-				SetNode(Leg1, lower * MakeVector3(-0.4F, 0.1F, 1));
-				SetNode(Leg2, lower * MakeVector3(0.4F, 0.1F, 1));
-
-				SetNode(Arm1, torso * MakeVector3(0.4F, -0.8F, 0.1F));
-				SetNode(Arm2, torso * MakeVector3(0.1F, -0.8F, 0.1F));
 			} else {
 				torso = lower * Matrix4::Translate(0, 0, -1.1F);
 
@@ -73,15 +74,18 @@ namespace spades {
 				SetNode(Torso2, torso * MakeVector3(-0.4F, 0, 0.1F));
 				SetNode(Torso3, torso * MakeVector3(-0.4F, 0, 1));
 				SetNode(Torso4, torso * MakeVector3(0.4F, 0, 1));
-
-				SetNode(Leg1, lower * MakeVector3(-0.4F, 0, 1));
-				SetNode(Leg2, lower * MakeVector3(0.4F, 0, 1));
-
-				SetNode(Arm1, torso * MakeVector3(0.4F, -0.8F, 0.1F));
-				SetNode(Arm2, torso * MakeVector3(0.1F, -0.8F, 0.1F));
 			}
 
-			SetNode(Head, (nodes[Torso1].pos + nodes[Torso2].pos) * 0.5F + MakeVector3(0, 0, -0.6F));
+			Matrix4 const head = torso
+				* Matrix4::Rotate(MakeVector3(1, 0, 0), pitch);
+			Matrix4 const arms = torso
+				* Matrix4::Rotate(MakeVector3(1, 0, 0), armPitch);
+
+			SetNode(Leg1, lower * MakeVector3(-0.4F, 0, 1));
+			SetNode(Leg2, lower * MakeVector3(0.4F, 0, 1));
+			SetNode(Arm1, arms * MakeVector3(0.4F, -0.8F, 0.1F));
+			SetNode(Arm2, arms * MakeVector3(0.1F, -0.8F, 0.1F));
+			SetNode(Head, head * MakeVector3(0, 0, -0.9F));
 		}
 
 		void Corpse::SetNode(NodeType n, spades::Vector3 v) {
@@ -514,12 +518,17 @@ namespace spades {
 			Matrix4 torso;
 			Vector3 tX, tY;
 
-			// kinda trashy but works for now
-			auto path = "Models/Player/" + weaponName;
+			std::string fullPath = "Models/Player/";
+			if (!cg_defaultPlayerModels)
+				fullPath += weaponName + "/";
+
+			const auto getModel = [&](const std::string& fn) -> Handle<IModel> {
+				return renderer.RegisterModel((fullPath + fn + ".kv6").c_str());
+			};
 
 			// Torso
 			{
-				model = renderer.RegisterModel((path + "/Torso.kv6").c_str());
+				model = getModel("Torso");
 
 				Vector3 tX1 = nodes[Torso1].pos - nodes[Torso2].pos;
 				Vector3 tX2 = nodes[Torso4].pos - nodes[Torso3].pos;
@@ -538,7 +547,7 @@ namespace spades {
 
 			// Head
 			{
-				model = renderer.RegisterModel((path + "/Head.kv6").c_str());
+				model = getModel("Head");
 
 				Vector3 headBase = (torso * MakeVector3(0.0F, 0.0F, 0.0F)).GetXYZ();
 
@@ -557,7 +566,7 @@ namespace spades {
 
 			// Arms
 			{
-				model = renderer.RegisterModel((path + "/Arm.kv6").c_str());
+				model = getModel("Arm");
 
 				Vector3 arm1Base = (torso * MakeVector3(0.4F, 0.0F, 0.1F)).GetXYZ();
 				Vector3 arm2Base = (torso * MakeVector3(-0.4F, 0.0F, 0.1F)).GetXYZ();
@@ -587,7 +596,7 @@ namespace spades {
 
 			// Legs
 			{
-				model = renderer.RegisterModel((path + "/Leg.kv6").c_str());
+				model = getModel("Leg");
 
 				Vector3 leg1Base = (torso * MakeVector3(0.25F, 0.0F, 0.9F)).GetXYZ();
 				Vector3 leg2Base = (torso * MakeVector3(-0.25F, 0.0F, 0.9F)).GetXYZ();
@@ -622,7 +631,7 @@ namespace spades {
 
 		bool Corpse::IsVisibleFrom(spades::Vector3 eye) {
 			// distance culled?
-			if ((eye - GetCenter()).GetSquaredLength2D() > FOG_DISTANCE * FOG_DISTANCE)
+			if ((GetCenter() - eye).GetSquaredLength2D() > FOG_DISTANCE_SQ)
 				return false;
 
 			for (int i = 0; i < NodeCount; i++) {

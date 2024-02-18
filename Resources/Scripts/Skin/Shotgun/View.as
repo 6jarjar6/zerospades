@@ -186,20 +186,23 @@ namespace spades {
 		ViewShotgunSkin(Renderer@ r, AudioDevice@ dev) {
 			super(r);
 			@audioDevice = dev;
+			
+			// load models
 			@gunModel = renderer.RegisterModel("Models/Weapons/Shotgun/WeaponNoPump.kv6");
 			@pumpModel = renderer.RegisterModel("Models/Weapons/Shotgun/Pump.kv6");
 			@sightModel1 = renderer.RegisterModel("Models/Weapons/Shotgun/Sight1.kv6");
 			@sightModel2 = renderer.RegisterModel("Models/Weapons/Shotgun/Sight2.kv6");
 
+			// load sounds
 			@fireSound = dev.RegisterSound("Sounds/Weapons/Shotgun/FireLocal.opus");
-			@fireFarSound = dev.RegisterSound("Sounds/Weapons/Shotgun/FireFar.opus");
+			@fireFarSound = dev.RegisterSound("Sounds/Weapons/SMG/FireFar.opus");
 			@fireStereoSound = dev.RegisterSound("Sounds/Weapons/Shotgun/FireStereo.opus");
-			@reloadSound = dev.RegisterSound("Sounds/Weapons/Shotgun/ReloadLocal.opus");
-			@cockSound = dev.RegisterSound("Sounds/Weapons/Shotgun/CockLocal.opus");
-
 			@fireSmallReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceSmall.opus");
 			@fireLargeReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceLarge.opus");
-
+			@reloadSound = dev.RegisterSound("Sounds/Weapons/Shotgun/ReloadLocal.opus");
+			@cockSound = dev.RegisterSound("Sounds/Weapons/Shotgun/CockLocal.opus");
+			
+			// load images
 			@scopeImage = renderer.RegisterImage("Gfx/Shotgun.png");
 
 			raiseSpring.position = 1;
@@ -272,8 +275,8 @@ namespace spades {
 					origin, param);
 
 				param.volume = 2.0F;
-				audioDevice.PlayLocal(fireFarSound, origin, param);
-				audioDevice.PlayLocal(fireStereoSound, origin, param);
+                audioDevice.PlayLocal(fireFarSound, origin, param);
+                audioDevice.PlayLocal(fireStereoSound, origin, param);
 			}
 
 			recoilVerticalSpring.velocity += 2.5;
@@ -310,19 +313,22 @@ namespace spades {
 		Matrix4 GetViewWeaponMatrix() {
 			Matrix4 mat;
 
-			// sprint animation
-			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position) * mat;
-
-			// raise gun animation
-			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F) * mat;
-			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position) * mat;
-
 			float sp = 1.0F - AimDownSightStateSmooth;
 
+			// sprint animation
+			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position * sp) * mat;
+
+			// raise gun animation
+			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F * sp) * mat;
+			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position * sp) * mat;
+
 			// recoil animation
-			Vector3 recoilRot = Vector3(-1.0, 0.3, 0.3) * recoilVerticalSpring.position;
+            Vector3 recoilRot(0, 0, 0);
+            recoilRot.x = -1.0F * recoilVerticalSpring.position;
+			recoilRot.y = 0.3F * recoilRotationSpring.position;
+			recoilRot.z = 0.3F * recoilRotationSpring.position;
 			Vector3 recoilOffset = Vector3(0, 0, -0.1) * recoilVerticalSpring.position * sp;
 			recoilOffset -= Vector3(0, 1.0, 0) * recoilBackSpring.position;
 			mat = CreateEulerAnglesMatrix(recoilRot * sp) * mat;

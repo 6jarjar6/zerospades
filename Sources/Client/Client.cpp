@@ -58,8 +58,8 @@ DEFINE_SPADES_SETTING(cg_chatBeep, "1");
 DEFINE_SPADES_SETTING(cg_alerts, "1");
 DEFINE_SPADES_SETTING(cg_alertSounds, "1");
 DEFINE_SPADES_SETTING(cg_serverAlert, "1");
-DEFINE_SPADES_SETTING(cg_privateMessageAlert, "0");
 DEFINE_SPADES_SETTING(cg_skipDeadPlayersWhenDead, "1");
+DEFINE_SPADES_SETTING(cg_ignorePrivateMessages, "0");
 DEFINE_SPADES_SETTING(cg_ignoreChatMessages, "0");
 DEFINE_SPADES_SETTING(cg_smallFont, "0");
 
@@ -80,6 +80,7 @@ namespace spades {
 		      readyToClose(false),
 
 		      worldSubFrame(0.0F),
+		      worldSubFrameFast(0.0F),
 		      frameToRendererInit(5),
 		      timeSinceInit(0.0F),
 		      hasLastTool(false),
@@ -91,12 +92,14 @@ namespace spades {
 		      curKills(0),
 		      curDeaths(0),
 		      curStreak(0),
-		      lastStreak(0),
 		      bestStreak(0),
-		      hasDelayedReload(false),
+		      meleeKills(0),
+		      grenadeKills(0),
+		      placedBlocks(0),
 		      localFireVibrationTime(-1.0F),
 		      grenadeVibration(0.0F),
 		      grenadeVibrationSlow(0.0F),
+		      reloadKeyPressed(false),
 		      scoreboardVisible(false),
 		      flashlightOn(false),
 		      hitFeedbackIconState(0.0F),
@@ -121,12 +124,13 @@ namespace spades {
 			renderer->SetFogDistance(128.0F);
 
 			auto* chatFont = cg_smallFont ? &fontManager->GetSmallFont() : &fontManager->GetGuiFont();
+			auto* centerFont = cg_smallFont ? &fontManager->GetMediumFont() : &fontManager->GetLargeFont();
 
 			chatWindow = stmp::make_unique<ChatWindow>(this, &GetRenderer(), chatFont, false);
 			killfeedWindow = stmp::make_unique<ChatWindow>(this, &GetRenderer(), chatFont, true);
 
 			hurtRingView = stmp::make_unique<HurtRingView>(this);
-			centerMessageView = stmp::make_unique<CenterMessageView>(this, &fontManager->GetLargeFont());
+			centerMessageView = stmp::make_unique<CenterMessageView>(this, centerFont);
 			mapView = stmp::make_unique<MapView>(this, false);
 			largeMapView = stmp::make_unique<MapView>(this, true);
 			scoreboard = stmp::make_unique<ScoreboardView>(this);
@@ -156,6 +160,7 @@ namespace spades {
 			lastHurtTime = -100.0F;
 			hurtRingView->ClearAll();
 
+			reloadKeyPressed = false;
 			scoreboardVisible = false;
 			flashlightOn = false;
 			debugHitTestZoom = false;
@@ -197,6 +202,7 @@ namespace spades {
 			limbo->SetSelectedWeapon(RIFLE_WEAPON);
 
 			worldSubFrame = 0.0F;
+			worldSubFrameFast = 0.0F;
 			worldSetTime = time;
 			inGameLimbo = false;
 		}
@@ -246,6 +252,7 @@ namespace spades {
 			renderer->Init();
 			SmokeSpriteEntity::Preload(renderer.GetPointerOrNull());
 
+			// load images
 			renderer->RegisterImage("Gfx/Bullet/7.62mm.png");
 			renderer->RegisterImage("Gfx/Bullet/9mm.png");
 			renderer->RegisterImage("Gfx/Bullet/12gauge.png");
@@ -256,6 +263,8 @@ namespace spades {
 			renderer->RegisterImage("Gfx/White.tga");
 			renderer->RegisterImage("Textures/Fluid.png");
 			renderer->RegisterImage("Textures/WaterExpl.png");
+
+			// load sounds
 			audioDevice->RegisterSound("Sounds/Feedback/Chat.opus");
 			audioDevice->RegisterSound("Sounds/Misc/SwitchMapZoom.opus");
 			audioDevice->RegisterSound("Sounds/Misc/OpenMap.opus");
@@ -284,9 +293,28 @@ namespace spades {
 			audioDevice->RegisterSound("Sounds/Weapons/Restock.opus");
 			audioDevice->RegisterSound("Sounds/Weapons/RestockLocal.opus");
 			audioDevice->RegisterSound("Sounds/Weapons/AimDownSightLocal.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/WaterExplode.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/WaterExplodeFar.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/Explode1.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/ExplodeStereo1.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/Explode2.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/ExplodeStereo2.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/ExplodeFar.opus");
+			audioDevice->RegisterSound("Sounds/Weapons/Grenade/Debris.opus");
+
+			// load models
 			renderer->RegisterModel("Models/MapObjects/Intel.kv6");
 			renderer->RegisterModel("Models/MapObjects/CheckPoint.kv6");
 			renderer->RegisterModel("Models/MapObjects/BlockCursorLine.kv6");
+			renderer->RegisterModel("Models/Player/Dead.kv6");
+			renderer->RegisterModel("Models/Player/Arm.kv6");
+			renderer->RegisterModel("Models/Player/UpperArm.kv6");
+			renderer->RegisterModel("Models/Player/LegCrouch.kv6");
+			renderer->RegisterModel("Models/Player/TorsoCrouch.kv6");
+			renderer->RegisterModel("Models/Player/Leg.kv6");
+			renderer->RegisterModel("Models/Player/Torso.kv6");
+			renderer->RegisterModel("Models/Player/Arms.kv6");
+			renderer->RegisterModel("Models/Player/Head.kv6");
 			renderer->RegisterModel("Models/Player/Rifle/Dead.kv6");
 			renderer->RegisterModel("Models/Player/Rifle/Arm.kv6");
 			renderer->RegisterModel("Models/Player/Rifle/UpperArm.kv6");
@@ -339,7 +367,7 @@ namespace spades {
 			net = stmp::make_unique<NetClient>(this);
 			net->Connect(hostname);
 
-			// decide log file name
+			// get host/time string
 			std::string fn = hostname.ToString(false);
 			std::string fn2;
 			{
@@ -348,9 +376,7 @@ namespace spades {
 				::time(&t);
 				tm = *localtime(&t);
 				char buf[256];
-				sprintf(buf, "%04d%02d%02d%02d%02d%02d_",
-					tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-					tm.tm_hour, tm.tm_min, tm.tm_sec);
+				strftime(buf, sizeof(buf), "%Y%m%d%H%M%S_", &tm);
 				fn2 = buf;
 			}
 			for (size_t i = 0; i < fn.size(); i++) {
@@ -360,13 +386,14 @@ namespace spades {
 				else
 					fn2 += '_';
 			}
-			fn2 = "NetLogs/" + fn2 + ".log";
 
+			// decide log file name
+			const std::string logFn = "NetLogs/" + fn2 + ".log";
 			try {
-				logStream = FileManager::OpenForWriting(fn2.c_str());
-				SPLog("Netlog Started at '%s'", fn2.c_str());
+				logStream = FileManager::OpenForWriting(logFn.c_str());
+				SPLog("Netlog started at '%s'", logFn.c_str());
 			} catch (const std::exception& ex) {
-				SPLog("Failed to open netlog file '%s' (%s)", fn2.c_str(), ex.what());
+				SPLog("Failed to open netlog file '%s' (%s)", logFn.c_str(), ex.what());
 			}
 		}
 
@@ -462,9 +489,6 @@ namespace spades {
 			if (scriptedUI->WantsClientToBeClosed())
 				readyToClose = true;
 
-			// reset all "delayed actions" (in case we forget to reset these)
-			hasDelayedReload = false;
-
 			time += dt;
 		}
 
@@ -493,28 +517,30 @@ namespace spades {
 			if (team == 2)
 				team = 255;
 
-			if (!world->GetLocalPlayer() || world->GetLocalPlayer()->IsSpectator()) {
-				// join
+			stmp::optional<Player&> maybePlayer = world->GetLocalPlayer();
+			if (!maybePlayer || maybePlayer->IsSpectator()) { // join
 				if (team == 255) {
 					// weaponId doesn't matter for spectators, but
 					// NetClient doesn't like invalid weapon ID
 					weap = WeaponType::RIFLE_WEAPON;
 				}
 				net->SendJoin(team, weap, playerName, lastScore);
-			} else {
-				Player& p = world->GetLocalPlayer().value();
-				if (p.GetTeamId() != team)
-					net->SendTeamChange(team);
+			} else { // localplayer has joined
+				Player& p = maybePlayer.value();
+					if (p.GetTeamId() != team)
+						net->SendTeamChange(team);
 				if (team != 255 && p.GetWeapon().GetWeaponType() != weap)
-					net->SendWeaponChange(weap);
-			}
+						net->SendWeaponChange(weap);
+				}
 
 			inGameLimbo = false;
 		}
 
 		void Client::ShowAlert(const std::string& contents, AlertType type) {
-			if (type != AlertType::Notice && !cg_alerts) {
-				PlayAlertSound();
+			if (!cg_alerts) {
+				chatWindow->AddMessage(contents);
+				if (type != AlertType::Notice)
+					PlayAlertSound();
 				return;
 			}
 
@@ -626,35 +652,51 @@ namespace spades {
 #pragma mark - Chat Messages
 
 		void Client::PlayerSentChatMessage(Player& p, bool global, const std::string& msg) {
-			// filters player messages (but they can still be found in logs)
-			bool ignoreMessages = cg_ignoreChatMessages && !p.IsLocalPlayer();
-
-			if (!ignoreMessages) {
-				std::string s;
-				if (global)
-					s = _Tr("Client", p.IsAlive() ? "[Global] " : "*DEAD* ");
-				s += ChatWindow::TeamColorMessage(p.GetName(), p.GetTeamId());
-				s += ": ";
-				s += msg;
-
-				chatWindow->AddMessage(s);
+			{
+				std::string s = global
+					? _Tr("Client", "Global") : _Tr("Client", "Team");
+				std::string teamName = p.IsSpectator()
+					? _Tr("Client", "Spectator") : p.GetTeamName();
+				NetLog("[%s] %s (%s): %s", s.c_str(),
+					p.GetName().c_str(), teamName.c_str(), msg.c_str());
 			}
 			{
 				std::string s;
 				if (global)
-					s = "[Global] ";
+					s = _Tr("Client", "[Global] ");
 				s += p.GetName();
 				s += ": ";
 				s += msg;
-
 				scriptedUI->RecordChatLog(s, ConvertColorRGBA(p.GetColor()));
 			}
 
-			std::string teamName = p.IsSpectator() ? "Spectator" : p.GetTeamName();
-			NetLog("[%s] %s (%s): %s", global ? "Global" : "Team",
-				p.GetName().c_str(), teamName.c_str(), msg.c_str());
+			// filters chat messages (but they can still be found in logs)
+			if (cg_ignoreChatMessages && !p.IsLocalPlayer())
+				return;
 
-			if (!IsMuted() && !ignoreMessages) {
+			{
+				std::string s;
+				if (global) {
+					//! Prefix added to global chat messages.
+					//!
+					//! Example: [Global] playername: blah blah
+					//! if sender is dead: *DEAD* playername: oof
+					//!
+					//! Crowdin warns that this string shouldn't be translated,
+					//! but it actually can be.
+					//! The extra whitespace is not a typo.
+					if (p.IsAlive())
+						s = _Tr("Client", "[Global] ");
+					else
+						s = _Tr("Client", "*DEAD* ");
+				}
+				s += ChatWindow::TeamColorMessage(p.GetName(), p.GetTeamId());
+				s += ": ";
+				s += msg;
+				chatWindow->AddMessage(s);
+			}
+
+			if (!IsMuted()) {
 				Handle<IAudioChunk> c = audioDevice->RegisterSound("Sounds/Feedback/Chat.opus");
 				AudioParam params;
 				params.volume = (float)cg_chatBeep;
@@ -693,14 +735,10 @@ namespace spades {
 
 			// Display private messages in green
 			if (msg.substr(0, 8) == "PM from ") {
-				std::string s = "PM from " + msg.substr(8);
-
-				// Display private messages as alerts
-				if (cg_privateMessageAlert) {
-					ShowAlert(s, AlertType::Notice);
+				if (cg_ignorePrivateMessages)
 					return;
-				}
 
+				std::string s = "PM from " + msg.substr(8);
 				chatWindow->AddMessage(ChatWindow::ColoredMessage(s, MsgColorGreen));
 				return;
 			}
@@ -711,16 +749,15 @@ namespace spades {
 #pragma mark - Follow / Spectate
 
 		void Client::FollowNextPlayer(bool reverse) {
-			SPAssert(world->GetLocalPlayer());
+			stmp::optional<Player&> maybePlayer = world->GetLocalPlayer();
+			SPAssert(maybePlayer);
 
-			auto& localPlayer = *world->GetLocalPlayer();
-			int myTeam = localPlayer.GetTeamId();
-
+			Player& localPlayer = maybePlayer.value();
 			bool localPlayerIsSpectator = localPlayer.IsSpectator();
 
-			int nextId = FollowsNonLocalPlayer(GetCameraMode())
-			               ? followedPlayerId
-			               : world->GetLocalPlayerIndex().value();
+			int localPlayerId = localPlayer.GetId();
+			int nextId = FollowsNonLocalPlayer(GetCameraMode()) ? followedPlayerId : localPlayerId;
+
 			do {
 				reverse ? --nextId : ++nextId;
 
@@ -732,7 +769,7 @@ namespace spades {
 				stmp::optional<Player&> p = world->GetPlayer(nextId);
 				if (!p || p->IsSpectator())
 					continue; // Do not follow a non-existent player or spectator
-				if (!localPlayerIsSpectator && p->GetTeamId() != myTeam)
+				if (!localPlayerIsSpectator && !p->IsTeammate(localPlayer))
 					continue; // Skip enemies unless the local player is a spectator
 				if (!localPlayerIsSpectator && !p->IsAlive() && cg_skipDeadPlayersWhenDead)
 					continue; // Skip dead players unless the local player is not a spectator
@@ -745,7 +782,7 @@ namespace spades {
 			} while (nextId != followedPlayerId);
 
 			followedPlayerId = nextId;
-			followCameraState.enabled = (followedPlayerId != world->GetLocalPlayerIndex());
+			followCameraState.enabled = (followedPlayerId != localPlayerId);
 		}
 	} // namespace client
 } // namespace spades

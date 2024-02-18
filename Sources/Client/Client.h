@@ -116,6 +116,7 @@ namespace spades {
 			float time;
 			bool readyToClose;
 			float worldSubFrame;
+			float worldSubFrameFast;
 
 			int frameToRendererInit;
 			float timeSinceInit;
@@ -146,22 +147,25 @@ namespace spades {
 			KeypadInput keypadInput;
 			Player::ToolType lastTool;
 			bool hasLastTool;
-			Vector3 lastPos;
-			Vector3 lastFront;
+			Vector3 lastPosSent;
+			Vector3 lastFrontSent;
 			float lastPosSentTime;
 			float lastOriSentTime;
-			int lastHealth;
 			float lastHurtTime;
 			float lastAliveTime;
 			float lastHitTime;
+			int lastHealth;
 			int lastScore;
 			int curKills;
 			int curDeaths;
 			int curStreak;
-			int lastStreak;
 			int bestStreak;
+			int meleeKills;
+			int grenadeKills;
+			int placedBlocks;
 			float worldSetTime;
-			bool hasDelayedReload;
+
+			bool reloadKeyPressed;
 
 			struct HurtSprite {
 				float angle;
@@ -180,8 +184,8 @@ namespace spades {
 			};
 			std::list<DamageIndicator> damageIndicators;
 
-			float GetAimDownState();
 			float GetSprintState();
+			float GetAimDownState();
 
 			/**
 			 * Queries whether the local player is allowed to use a tool in this state.
@@ -200,6 +204,7 @@ namespace spades {
 			 */
 			bool CanLocalPlayerUseTool();
 			bool CanLocalPlayerUseWeapon();
+			bool CanLocalPlayerReloadWeapon();
 
 			/** Retrieves `ClientPlayer` for the local player, or `{}` if it does not exist. */
 			stmp::optional<ClientPlayer&> GetLocalClientPlayer();
@@ -310,12 +315,12 @@ namespace spades {
 			 * The camera mode must be first-person.
 			 */
 			float GetAimDownZoomScale();
-
-			bool inGameLimbo;
-
 			float GetLocalFireVibration();
+
 			void SetBlockColor(IntVector3 color);
 			void CaptureColor();
+
+			bool inGameLimbo;
 			bool IsLimboViewActive();
 			void SpawnPressed();
 
@@ -326,10 +331,10 @@ namespace spades {
 			std::vector<DynamicLightParam> flashDlightsOld;
 			void Bleed(Vector3);
 			void EmitBlockFragments(Vector3, IntVector3 color);
-			void EmitBlockDestroyFragments(Vector3, IntVector3 color);
+			void EmitBlockDestroyFragments(IntVector3 pos);
 			void GrenadeExplosion(Vector3);
 			void GrenadeExplosionUnderwater(Vector3);
-			void MuzzleFire(Vector3, Vector3 dir);
+			void MuzzleFire(Vector3);
 			void BulletHitWaterSurface(Vector3, IntVector3 color);
 
 			// drawings
@@ -360,7 +365,7 @@ namespace spades {
 			int nextMapShotIndex;
 
 			/** Project the specified world-space position to a screen space. */
-			bool Project(const Vector3&, Vector3&);
+			bool Project(const Vector3&, Vector2&);
 
 			/** Recalculate `lastViewProjectionScreenMatrix` based on the current value of
 			 * `lastSceneDef`. */
@@ -386,10 +391,10 @@ namespace spades {
 			void Draw2DWithoutWorld();
 			void Draw2DWithWorld();
 
-			/** Called when the local plyaer is alive. */
+			/** Called when the local player is alive. */
 			void DrawJoinedAlivePlayerHUD();
 
-			/** Called when the local plyaer is dead. */
+			/** Called when the local player is dead. */
 			void DrawDeadPlayerHUD();
 
 			/**
@@ -409,6 +414,7 @@ namespace spades {
 			void DrawHottrackedPlayerName();
 			void DrawPubOVL();
 
+			void DrawAlivePlayersCount();
 			void DrawPlayingTime();
 			void DrawHurtScreenEffect();
 			void DrawHurtSprites();
@@ -472,6 +478,8 @@ namespace spades {
 			SceneDefinition GetLastSceneDef() { return lastSceneDef; }
 			IAudioDevice& GetAudioDevice() { return *audioDevice; }
 
+			float GetTime() { return time; }
+
 			bool WantsToBeClosed() override;
 			bool IsMuted();
 
@@ -479,15 +487,15 @@ namespace spades {
 			void ServerSentMessage(bool system, const std::string&);
 
 			void PlayerCapturedIntel(Player&);
-			void PlayerCreatedBlock(Player&);
 			void PlayerPickedIntel(Player&);
 			void PlayerDropIntel(Player&);
 			void TeamCapturedTerritory(int teamId, int territoryId);
 			void TeamWon(int);
 			void JoinedGame();
 			void LocalPlayerCreated();
-			void PlayBlockDestroySound(IntVector3);
-			void PlayerDestroyedBlock(IntVector3);
+			void RegisterPlacedBlocks(int c) { placedBlocks += c; };
+			void PlayerCreatedBlock(Player&);
+			void PlayBlockDestroySound(Vector3);
 			void PlayerDestroyedBlockWithWeaponOrTool(IntVector3);
 			void PlayerDiggedBlock(IntVector3);
 			void GrenadeDestroyedBlock(IntVector3);

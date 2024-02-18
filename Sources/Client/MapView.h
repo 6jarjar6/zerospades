@@ -50,7 +50,8 @@ namespace spades {
 
 			Vector2 Project(const Vector2&) const;
 
-			void DrawIcon(Vector3 pos, IImage& img, float rotation = 0.0F);
+			void DrawIcon(Vector3 pos, IImage& img, Vector4 col, float rotation = 0.0F);
+			void DrawText(std::string s, Vector3 pos, Vector4 col);
 
 		public:
 			MapView(Client*, bool largeMap);
@@ -59,7 +60,7 @@ namespace spades {
 			void Update(float dt);
 			void SwitchScale();
 			bool IsZoomed() { return zoomed; }
-			bool ToggleZoom();
+			void SetZoom(bool value) { zoomed = value; };
 			std::string ToGrid(float x, float y);
 
 			void Draw();
@@ -74,9 +75,7 @@ namespace spades {
 			bool firstUpdate;
 
 		public:
-			bool shotgun;
-
-			MapViewTracer(Vector3 p1, Vector3 p2, float bulletVel, bool shotgun);
+			MapViewTracer(Vector3 p1, Vector3 p2);
 			~MapViewTracer();
 
 			bool Update(float dt) override;

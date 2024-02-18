@@ -110,7 +110,7 @@ namespace spades {
 
 			const auto& viewOrigin = client->GetLastSceneDef().viewOrigin;
 			float distSqr = (viewOrigin - matrix.GetOrigin()).GetSquaredLength2D();
-			if (distSqr > FOG_DISTANCE * FOG_DISTANCE)
+			if (distSqr > FOG_DISTANCE_SQ)
 				return false;
 
 			bool usePrecisePhysics = false;
@@ -118,7 +118,7 @@ namespace spades {
 				usePrecisePhysics = true;
 
 			if (MoveBlock(dt) == 2) {
-				if (!client->IsMuted() && distSqr < 40.0F * 40.0F) {
+				if (!client->IsMuted() && distSqr < 16.0F * 16.0F) {
 					IAudioDevice& dev = client->GetAudioDevice();
 					Handle<IAudioChunk> c = dev.RegisterSound("Sounds/Player/Bounce.opus");
 					dev.Play(c.GetPointerOrNull(), matrix.GetOrigin(), AudioParam());
@@ -140,7 +140,7 @@ namespace spades {
 				Vector3 vmAxis3 = vmat.GetAxis(2);
 
 				// this could get annoying with some server scripts..
-				client->PlayBlockDestroySound(vmOrigin.Floor());
+				client->PlayBlockDestroySound(vmOrigin);
 
 				Handle<IImage> img = client->GetRenderer().RegisterImage("Gfx/White.tga");
 
@@ -177,9 +177,8 @@ namespace spades {
 									client->AddLocalEntity(std::move(ent));
 								}
 
-								if (cg_particles == 2) {
-									auto ent =
-									  stmp::make_unique<SmokeSpriteEntity>(*client, color, 70.0F);
+								if ((int)cg_particles >= 2) {
+									auto ent = stmp::make_unique<SmokeSpriteEntity>(*client, color, 70.0F);
 									ent->SetTrajectory(p3, RandomAxis() * 0.2F, 1.0F, 0.0F);
 									ent->SetRotation(getRandom() * M_PI_F * 2.0F);
 									ent->SetRadius(1.0F, 0.5F);
@@ -225,14 +224,14 @@ namespace spades {
 					ret = 2; // play sound
 
 				IntVector3 lp2 = lastMat.GetOrigin().Floor();
-				if (lp.z != lp2.z &&
-				    ((lp.x == lp2.x && lp.y == lp2.y) || !map->ClipWorld(lp.x, lp.y, lp2.z)))
+				if (lp.z != lp2.z && ((lp.x == lp2.x && lp.y == lp2.y)
+					|| !map->ClipWorld(lp.x, lp.y, lp2.z)))
 					velocity.z = -velocity.z;
-				else if (lp.x != lp2.x &&
-				         ((lp.y == lp2.y && lp.z == lp2.z) || !map->ClipWorld(lp2.x, lp.y, lp.z)))
+				else if (lp.x != lp2.x && ((lp.y == lp2.y && lp.z == lp2.z)
+					|| !map->ClipWorld(lp2.x, lp.y, lp.z)))
 					velocity.x = -velocity.x;
-				else if (lp.y != lp2.y &&
-				         ((lp.x == lp2.x && lp.z == lp2.z) || !map->ClipWorld(lp.x, lp2.y, lp.z)))
+				else if (lp.y != lp2.y && ((lp.x == lp2.x && lp.z == lp2.z)
+					|| !map->ClipWorld(lp.x, lp2.y, lp.z)))
 					velocity.y = -velocity.y;
 
 				matrix = lastMat; // set back to old position
@@ -251,7 +250,7 @@ namespace spades {
 		void FallingBlock::Render3D() {
 			ModelRenderParam param;
 			param.ghost = true;
-			param.opacity = std::max(0.25F, (1.0F * time));
+			param.opacity = std::max(0.25F, time);
 			param.matrix = matrix;
 			client->GetRenderer().RenderModel(*model, param);
 		}

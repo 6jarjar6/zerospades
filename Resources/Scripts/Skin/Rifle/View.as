@@ -68,14 +68,11 @@ namespace spades {
 		private double lastSprintState = 0;
 		private double lastRaiseState = 0;
 
-		// I need trueReloadProgress because reloadProgress is choppy.
-		private double trueReloadProgress = 2.5;
-
 		Matrix4 AdjustToReload(Matrix4 mat) {
-			if (trueReloadProgress < 0.6) {
+			if (reloadProgress < 0.6) {
 				reloadPitchSpring.desired = 0.6;
 				reloadRollSpring.desired = 0.6;
-			} else if (trueReloadProgress < 0.9) {
+			} else if (reloadProgress < 0.9) {
 				reloadPitchSpring.desired = 0;
 				reloadRollSpring.desired = -0.6;
 			} else {
@@ -117,16 +114,16 @@ namespace spades {
 		Vector3 GetMagazineOffset() {
 			Vector3 offsetPos = Vector3(0, -6, 8);
 
-			if (trueReloadProgress < 0.2) {
+			if (reloadProgress < 0.2) {
 				return magazineAttachment;
-			} else if (trueReloadProgress < 0.25) {
+			} else if (reloadProgress < 0.25) {
 				magazineRemoved.Activate();
-				float per = Min(1.0, (trueReloadProgress-0.2) / (0.25-0.2));
+				float per = Min(1.0, (reloadProgress-0.2) / (0.25-0.2));
 				return Mix(magazineAttachment, offsetPos, SmoothStep(per));
-			} else if (trueReloadProgress < 0.4) {
+			} else if (reloadProgress < 0.4) {
 				return offsetPos;
-			} else if (trueReloadProgress < 0.5) {
-				float per = Min(1.0, (trueReloadProgress-0.4) / (0.5-0.4));
+			} else if (reloadProgress < 0.5) {
+				float per = Min(1.0, (reloadProgress-0.4) / (0.5-0.4));
 				return Mix(offsetPos, magazineAttachment, SmoothStep(per));
 			} else {
 				magazineInserted.Activate();
@@ -138,14 +135,14 @@ namespace spades {
 			Vector3 leftHandOffset = Vector3(1, 6, 1);
 			Vector3 magazineOffset = GetMagazineOffset() + Vector3(0, 0, 4);
 
-			if (trueReloadProgress < 0.1) {
-				float per = Min(1.0, trueReloadProgress / 0.1);
+			if (reloadProgress < 0.1) {
+				float per = Min(1.0, reloadProgress / 0.1);
 				return Mix(leftHandOffset, magazineOffset, SmoothStep(per));
-			} else if (trueReloadProgress < 0.6) {
+			} else if (reloadProgress < 0.6) {
 				magazineTouched.Activate();
 				return magazineOffset;
-			} else if (trueReloadProgress < 1.0) {
-				float per = Min(1.0, (trueReloadProgress-0.6) / (1.0-0.9));
+			} else if (reloadProgress < 1.0) {
+				float per = Min(1.0, (reloadProgress-0.6) / (1.0-0.9));
 				return Mix(magazineOffset, leftHandOffset, SmoothStep(per));
 			} else {
 				return leftHandOffset;
@@ -162,19 +159,19 @@ namespace spades {
 
 			Vector3 handlePullingOffset = chargingHandleOffset + Vector3(-1, -4, 0);
 
-			if (trueReloadProgress < 0.7) {
+			if (reloadProgress < 0.7) {
 				return rightHandOffset;
-			} else if (trueReloadProgress < 0.8) {
-				float per = Min(1.0, (trueReloadProgress-0.7) / (0.8-0.7));
+			} else if (reloadProgress < 0.8) {
+				float per = Min(1.0, (reloadProgress-0.7) / (0.8-0.7));
 				return Mix(rightHandOffset, chargingHandleOffset, SmoothStep(per));
-			} else if (trueReloadProgress < 0.82) {
+			} else if (reloadProgress < 0.82) {
 				return chargingHandleOffset;
-			} else if (trueReloadProgress < 0.87) {
+			} else if (reloadProgress < 0.87) {
 				chargingHandlePulled.Activate();
-				float per = Min(1.0, (trueReloadProgress-0.82) / (0.87-0.82));
+				float per = Min(1.0, (reloadProgress-0.82) / (0.87-0.82));
 				return Mix(chargingHandleOffset, handlePullingOffset, SmoothStep(per));
-			} else if (trueReloadProgress < 1.0) {
-				float per = Min(1.0, (trueReloadProgress-0.87) / (1.0-0.87));
+			} else if (reloadProgress < 1.0) {
+				float per = Min(1.0, (reloadProgress-0.87) / (1.0-0.87));
 				return Mix(handlePullingOffset, rightHandOffset, SmoothStep(per));
 			} else {
 				return rightHandOffset;
@@ -184,19 +181,22 @@ namespace spades {
 		ViewRifleSkin(Renderer@ r, AudioDevice@ dev) {
 			super(r);
 			@audioDevice = dev;
+			
+			// load models
 			@gunModel = renderer.RegisterModel("Models/Weapons/Rifle/WeaponNoMagazine.kv6");
 			@magazineModel = renderer.RegisterModel("Models/Weapons/Rifle/Magazine.kv6");
 			@sightModel1 = renderer.RegisterModel("Models/Weapons/Rifle/Sight1.kv6");
 			@sightModel2 = renderer.RegisterModel("Models/Weapons/Rifle/Sight2.kv6");
-
+			
+			// load sounds
 			@fireSound = dev.RegisterSound("Sounds/Weapons/Rifle/FireLocal.opus");
 			@fireFarSound = dev.RegisterSound("Sounds/Weapons/Rifle/FireFar.opus");
 			@fireStereoSound = dev.RegisterSound("Sounds/Weapons/Rifle/FireStereo.opus");
-			@reloadSound = dev.RegisterSound("Sounds/Weapons/Rifle/ReloadLocal.opus");
-
 			@fireSmallReverbSound = dev.RegisterSound("Sounds/Weapons/Rifle/V2AmbienceSmall.opus");
 			@fireLargeReverbSound = dev.RegisterSound("Sounds/Weapons/Rifle/V2AmbienceLarge.opus");
-
+			@reloadSound = dev.RegisterSound("Sounds/Weapons/Rifle/ReloadLocal.opus");
+			
+			// load images
 			@scopeImage = renderer.RegisterImage("Gfx/Rifle.png");
 
 			raiseSpring.position = 1;
@@ -221,7 +221,6 @@ namespace spades {
 			reloadPitchSpring.Update(dt);
 			reloadRollSpring.Update(dt);
 			reloadOffsetSpring.Update(dt);
-			trueReloadProgress += dt / 2.5;
 
 			sprintSpring.Update(dt);
 			raiseSpring.Update(dt);
@@ -261,16 +260,19 @@ namespace spades {
 			if (!IsMuted) {
 				Vector3 origin = Vector3(0.4F, -0.3F, 0.5F);
 				AudioParam param;
-				param.referenceDistance = 4.0F;
-				param.volume = 1.0F;
-				audioDevice.PlayLocal(fireFarSound, origin, param);
-				param.referenceDistance = 1.0F;
-				audioDevice.PlayLocal(fireStereoSound, origin, param);
-
+				param.volume = 8.0F;
+				audioDevice.PlayLocal(fireSound, origin, param);
+				
 				param.volume = 8.0F * environmentRoom;
 				audioDevice.PlayLocal((environmentSize < 0.5F)
 					? fireSmallReverbSound : fireLargeReverbSound,
 					origin, param);
+					
+				param.referenceDistance = 4.0F;
+                param.volume = 1.0F;
+                audioDevice.PlayLocal(fireFarSound, origin, param);
+                param.referenceDistance = 1.0F;
+                audioDevice.PlayLocal(fireStereoSound, origin, param);
 			}
 
 			recoilVerticalSpring.velocity += 1.5;
@@ -290,8 +292,6 @@ namespace spades {
 				param.volume = 0.5F;
 				audioDevice.PlayLocal(reloadSound, origin, param);
 			}
-
-			trueReloadProgress = 0;
 		}
 
 		// (override BasicViewWeapon::GetZPos())
@@ -301,19 +301,22 @@ namespace spades {
 		Matrix4 GetViewWeaponMatrix() {
 			Matrix4 mat;
 
-			// sprint animation
-			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position) * mat;
-
-			// raise gun animation
-			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F) * mat;
-			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position) * mat;
-
 			float sp = 1.0F - AimDownSightStateSmooth;
 
+			// sprint animation
+			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position * sp) * mat;
+
+			// raise gun animation
+			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F * sp) * mat;
+			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position * sp) * mat;
+
 			// recoil animation
-            Vector3 recoilRot = Vector3(-1.0, 0.3, 0.3) * recoilVerticalSpring.position;
+            Vector3 recoilRot(0, 0, 0);
+            recoilRot.x = -1.0F * recoilVerticalSpring.position;
+			recoilRot.y = 0.3F * recoilRotationSpring.position;
+			recoilRot.z = 0.3F * recoilRotationSpring.position;
             Vector3 recoilOffset = Vector3(0, 0, -0.1) * recoilVerticalSpring.position * sp;
             recoilOffset -= Vector3(0, 0.75, 0) * recoilBackSpring.position;
             mat = CreateEulerAnglesMatrix(recoilRot * sp) * mat;
@@ -362,7 +365,7 @@ namespace spades {
 
 			ModelRenderParam param;
 			param.depthHack = true;
-
+			
 			Matrix4 weapMatrix = eyeMatrix * mat;
 
 			// draw weapon

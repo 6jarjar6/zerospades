@@ -36,17 +36,18 @@ namespace spades {
 			return teams[t];
 		}
 
-		bool CTFGameMode::PlayerHasIntel(World& world, Player& player) {
-			if (player.IsSpectator())
+		bool CTFGameMode::PlayerHasIntel(Player& player) {
+			int teamId = player.GetTeamId();
+			if (teamId >= 2) // spectator
 				return false;
 
-			auto& team = teams[player.GetTeamId()];
-			return team.hasIntel && (int)team.carrierId == player.GetId();
+			auto& team = teams[teamId];
+			return team.hasIntel && static_cast<int>(team.carrierId) == player.GetId();
 		}
 
-		void CTFGameMode::ResetTeamScoreAndIntelHoldingStatus() {
+		void CTFGameMode::ResetIntelHoldingStatus() {
 			for (Team& team : teams) {
-				team.score = 0;
+				//team.score = 0;
 				team.hasIntel = false;
 			}
 		}

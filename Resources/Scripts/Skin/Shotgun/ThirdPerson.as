@@ -77,15 +77,13 @@ namespace spades {
             @renderer = r;
             @audioDevice = dev;
             @model = renderer.RegisterModel("Models/Weapons/Shotgun/Weapon.kv6");
-
             @fireSound = dev.RegisterSound("Sounds/Weapons/Shotgun/Fire.opus");
             @fireFarSound = dev.RegisterSound("Sounds/Weapons/Shotgun/FireFar.opus");
             @fireStereoSound = dev.RegisterSound("Sounds/Weapons/Shotgun/FireStereo.opus");
+			@fireSmallReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceSmall.opus");
+            @fireLargeReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceLarge.opus");
             @reloadSound = dev.RegisterSound("Sounds/Weapons/Shotgun/Reload.opus");
             @cockSound = dev.RegisterSound("Sounds/Weapons/Shotgun/Cock.opus");
-
-            @fireSmallReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceSmall.opus");
-            @fireLargeReverbSound = dev.RegisterSound("Sounds/Weapons/Shotgun/V2AmbienceLarge.opus");
         }
 
         void Update(float dt) {}
@@ -108,6 +106,7 @@ namespace spades {
                 audioDevice.Play(fireStereoSound, origin, param);
             }
         }
+		
         void ReloadingWeapon() {
             if (!muted) {
                 Vector3 origin = soundOrigin;
@@ -119,7 +118,7 @@ namespace spades {
 
         void ReloadedWeapon() {
             if (!muted) {
-                Vector3 origin = originMatrix * Vector3(0.0F, 0.0F, 0.0F);
+                Vector3 origin = soundOrigin;
                 AudioParam param;
                 param.volume = 0.2F;
                 audioDevice.Play(cockSound, origin, param);
@@ -129,10 +128,14 @@ namespace spades {
         void AddToScene() {
             Matrix4 mat = CreateScaleMatrix(0.05F);
 			mat = mat * CreateScaleMatrix(-1, -1, 1);
-            mat = CreateTranslateMatrix(0.35F, -1.0F, 0.0F) * mat;
+			
+			Vector3 trans = Vector3(0.4F, -0.9F, 0.0F);
+			trans -= 0.01F; // stop z-fighting		
+			mat = CreateTranslateMatrix(trans) * mat;
 
             ModelRenderParam param;
             param.matrix = originMatrix * mat;
+			param.customColor = teamColor;
             renderer.AddModel(model, param);
         }
     }

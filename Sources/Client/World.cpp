@@ -58,15 +58,36 @@ namespace spades {
 			return numPlayers;
 		}
 
+		size_t World::GetNumPlayersAlive(int team) {
+			size_t numPlayers = 0;
+			for (const auto& p : players) {
+				if (!p || !p->IsAlive() || team >= 2)
+					continue;
+				if (p->GetTeamId() != team)
+					continue;
+				++numPlayers;
+			}
+			return numPlayers;
+		}
+
+		void World::UpdatePlayer(float dt, bool locked) {
+			for (const auto& p : players) {
+				if (p && !p->IsSpectator()) {
+					if (locked) {
+						p->Update(dt);
+					} else {
+						p->UpdateSmooth(dt);
+					}
+				}
+			}
+		}
+
 		void World::Advance(float dt) {
 			SPADES_MARK_FUNCTION();
 
 			ApplyBlockActions();
 
-			for (const auto& p : players) {
-				if (p)
-					p->Update(dt);
-			}
+			UpdatePlayer(dt, true);
 
 			while (!damagedBlocksQueue.empty()) {
 				auto it = damagedBlocksQueue.begin();
@@ -75,10 +96,9 @@ namespace spades {
 
 				const auto& pos = it->second;
 				if (map && map->IsSolid(pos.x, pos.y, pos.z)) {
-					uint32_t color = map->GetColor(pos.x, pos.y, pos.z);
-					int health = 100;
-					color = ((health & 0xFF) << 24) | (color & 0xFFFFFF);
-					map->Set(pos.x, pos.y, pos.z, true, color);
+					uint32_t col = map->GetColor(pos.x, pos.y, pos.z);
+					col = (col & 0xFFFFFF) | (100UL << 24);
+					map->Set(pos.x, pos.y, pos.z, true, col);
 				}
 
 				damagedBlocksQueueMap.erase(damagedBlocksQueueMap.find(pos));
@@ -216,7 +236,7 @@ namespace spades {
 			for (const auto& creation : createdBlocks) {
 				const auto& pos = creation.first;
 				const auto& col = creation.second;
-				uint32_t color = col.x | (col.y << 8) | (col.z << 16) | (100UL << 24);
+				uint32_t color = IntVectorToColor(col) | (100UL << 24);
 				color = map->GetColorJit(color); // jit the colour
 				if (map->IsSolid(pos.x, pos.y, pos.z)) {
 					map->Set(pos.x, pos.y, pos.z, true, color);
@@ -363,8 +383,8 @@ namespace spades {
 		World::WeaponRayCastResult World::WeaponRayCast(spades::Vector3 startPos,
 			spades::Vector3 dir, stmp::optional<int> excludePlayerId) {
 			WeaponRayCastResult result;
-			stmp::optional<int> hitPlayer;
-			float hitPlayerDist2D = 0.0F;
+			stmp::optional<int> hitPlayerId;
+			float hitPlayerDist = 0.0F;
 			hitTag_t hitFlag = hit_None;
 
 			for (int i = 0; i < (int)players.size(); i++) {
@@ -380,41 +400,41 @@ namespace spades {
 				Vector3 hitPos;
 				Player::HitBoxes hb = p->GetHitBoxes();
 				if (hb.head.RayCast(startPos, dir, &hitPos)) {
-					float const dist = (hitPos - startPos).GetLength2D();
-					if (!hitPlayer || dist < hitPlayerDist2D) {
-						if (hitPlayer != i) {
-							hitPlayer = i;
+					float const dist = (hitPos - startPos).GetSquaredLength();
+					if (!hitPlayerId || dist < hitPlayerDist) {
+						if (hitPlayerId != i) {
+							hitPlayerId = i;
 							hitFlag = hit_None;
 						}
 
-						hitPlayerDist2D = dist;
+						hitPlayerDist = dist;
 						hitFlag |= hit_Head;
 					}
 				}
 
 				if (hb.torso.RayCast(startPos, dir, &hitPos)) {
-					float const dist = (hitPos - startPos).GetLength2D();
-					if (!hitPlayer || dist < hitPlayerDist2D) {
-						if (hitPlayer != i) {
-							hitPlayer = i;
+					float const dist = (hitPos - startPos).GetSquaredLength();
+					if (!hitPlayerId || dist < hitPlayerDist) {
+						if (hitPlayerId != i) {
+							hitPlayerId = i;
 							hitFlag = hit_None;
 						}
 
-						hitPlayerDist2D = dist;
+						hitPlayerDist = dist;
 						hitFlag |= hit_Torso;
 					}
 				}
 
 				for (int j = 0; j < 3; j++) {
 					if (hb.limbs[j].RayCast(startPos, dir, &hitPos)) {
-						float const dist = (hitPos - startPos).GetLength2D();
-						if (!hitPlayer || dist < hitPlayerDist2D) {
-							if (hitPlayer != i) {
-								hitPlayer = i;
+						float const dist = (hitPos - startPos).GetSquaredLength();
+						if (!hitPlayerId || dist < hitPlayerDist) {
+							if (hitPlayerId != i) {
+								hitPlayerId = i;
 								hitFlag = hit_None;
 							}
 
-							hitPlayerDist2D = dist;
+							hitPlayerDist = dist;
 							hitFlag |= (j == 2) ? hit_Arms : hit_Legs;
 						}
 					}
@@ -425,18 +445,20 @@ namespace spades {
 			GameMap::RayCastResult mapResult;
 			mapResult = map->CastRay2(startPos, dir, 256);
 
-			if (mapResult.hit && (mapResult.hitPos - startPos).GetLength2D() < FOG_DISTANCE &&
-			    (!hitPlayer || (mapResult.hitPos - startPos).GetLength2D() < hitPlayerDist2D)) {
+			float hitBlockDist = (mapResult.hitPos - startPos).GetSquaredLength();
+
+			if (mapResult.hit && hitBlockDist <= FOG_DISTANCE_SQ &&
+			    (!hitPlayerId || hitBlockDist < hitPlayerDist)) {
 				result.hit = true;
 				result.startSolid = mapResult.startSolid;
-				result.hitFlag = hit_None;
 				result.blockPos = mapResult.hitBlock;
 				result.hitPos = mapResult.hitPos;
-			} else if (hitPlayer && hitPlayerDist2D < FOG_DISTANCE) {
+				result.hitFlag = hit_None;
+			} else if (hitPlayerId) {
 				result.hit = true;
 				result.startSolid = false; // FIXME: startSolid for player
-				result.playerId = hitPlayer;
-				result.hitPos = startPos + dir * hitPlayerDist2D;
+				result.playerId = hitPlayerId;
+				result.hitPos = startPos + dir * sqrtf(hitPlayerDist);
 				result.hitFlag = hitFlag;
 			} else {
 				result.hit = false;

@@ -36,6 +36,7 @@
 #include <Core/FileManager.h>
 #include <Core/Settings.h>
 #include <Core/ShellApi.h>
+#include <Core/VersionInfo.h>
 #include <Gui/Icon.h>
 #include <Gui/Main.h>
 #include <OpenSpades.h>
@@ -164,13 +165,14 @@ namespace spades {
 						  return std::string();
 					  }
 				  }));
+			} else {
+				// check openAL drivers
+				SPLog("Checking OpenAL available drivers");
+				openalDevices = audio::ALDevice::DeviceList();
+				for (const auto &d: openalDevices) {
+					SPLog("%s", d.c_str());
+				}
 			}
-
-			// check openAL drivers
-			SPLog("Checking OpenAL available drivers");
-			openalDevices = audio::ALDevice::DeviceList();
-			for (const auto& d : openalDevices)
-				SPLog("%s", d.c_str());
 
 			// check GL capabilities
 
@@ -648,7 +650,7 @@ namespace spades {
 		std::string StartupScreenHelper::GetOperatingSystemType() {
 #if defined(OS_PLATFORM_LINUX)
 			return "Linux";
-#elif defined(TARGET_OS_MAC)
+#elif defined(OS_PLATFORM_MAC)
 			return "Mac";
 #elif defined(OS_PLATFORM_WINDOWS)
 			return "Windows";

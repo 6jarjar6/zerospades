@@ -286,6 +286,12 @@ namespace spades {
 						r = eng->RegisterObjectProperty("ModelRenderParam", "bool castShadow",
 						                                asOFFSET(ModelRenderParam, castShadow));
 						manager->CheckError(r);
+						r = eng->RegisterObjectProperty("ModelRenderParam", "bool ghost",
+						                                asOFFSET(ModelRenderParam, ghost));
+						manager->CheckError(r);
+						r = eng->RegisterObjectProperty("ModelRenderParam", "float opacity",
+						                                asOFFSET(ModelRenderParam, opacity));
+						manager->CheckError(r);
 
 						r = eng->RegisterObjectBehaviour(
 						  "DynamicLightParam", asBEHAVE_CONSTRUCT, "void f()",
@@ -518,6 +524,12 @@ namespace spades {
 						  "void DrawImage(Image@+, const Vector2&in, const Vector2&in, const "
 						  "Vector2&in, const AABB2& in)",
 						  asFUNCTION(DrawImage5), asCALL_CDECL_OBJLAST);
+						manager->CheckError(r);
+						r = eng->RegisterObjectMethod("Renderer", "void DrawFilledRect(float, float, float, float)",
+							asMETHODPR(IRenderer, DrawFilledRect, (float, float, float, float), void), asCALL_THISCALL);
+						manager->CheckError(r);
+						r = eng->RegisterObjectMethod("Renderer", "void DrawOutlinedRect(float, float, float, float)",
+							asMETHODPR(IRenderer, DrawOutlinedRect, (float, float, float, float), void), asCALL_THISCALL);
 						manager->CheckError(r);
 						r = eng->RegisterObjectMethod(
 						  "Renderer", "void DrawFlatGameMap(const AABB2&in, const AABB2& in)",

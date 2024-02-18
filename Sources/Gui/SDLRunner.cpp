@@ -146,11 +146,6 @@ namespace spades {
 				case SDL_KEYDOWN:
 					if (!event.key.repeat) {
 						if (event.key.keysym.mod & KMOD_ALT) {
-							if (event.key.keysym.sym == SDLK_F4) {
-								view.Closing();
-								return;
-							}
-
 							// Toggle fullscreen mode
 							if (event.key.keysym.sym == SDLK_RETURN) {
 								SDL_Window* window = SDL_GetWindowFromID(event.key.windowID);
@@ -452,8 +447,12 @@ namespace spades {
 #if !NDEBUG
 					caption.append(" DEBUG build");
 #endif
+#ifdef GIT_COMMIT_HASH
+					caption.append(" " GIT_COMMIT_HASH); // add git hash to window title
+#else
 #ifdef OPENSPADES_COMPILER_STR
 					caption.append(" " OPENSPADES_COMPILER_STR); // add compiler to window title
+#endif
 #endif
 				}
 

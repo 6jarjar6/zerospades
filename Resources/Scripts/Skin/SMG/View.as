@@ -176,30 +176,32 @@ namespace spades {
 		ViewSMGSkin(Renderer@ r, AudioDevice@ dev) {
 			super(r);
 			@audioDevice = dev;
+			
+			// load models
 			@gunModel = renderer.RegisterModel("Models/Weapons/SMG/WeaponNoMagazine.kv6");
 			@magazineModel = renderer.RegisterModel("Models/Weapons/SMG/Magazine.kv6");
 			@sightModel1 = renderer.RegisterModel("Models/Weapons/SMG/Sight1.kv6");
 			@sightModel2 = renderer.RegisterModel("Models/Weapons/SMG/Sight2.kv6");
 			@sightModel3 = renderer.RegisterModel("Models/Weapons/SMG/Sight3.kv6");
-
-			@fireSmallReverbSounds[0] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall1.opus");
-			@fireSmallReverbSounds[1] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall2.opus");
-			@fireSmallReverbSounds[2] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall3.opus");
-			@fireSmallReverbSounds[3] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall4.opus");
-
-			@fireLargeReverbSounds[0] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge1.opus");
-			@fireLargeReverbSounds[1] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge2.opus");
-			@fireLargeReverbSounds[2] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge3.opus");
-			@fireLargeReverbSounds[3] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge4.opus");
-
+			
+			// load sounds
 			@fireSounds[0] = dev.RegisterSound("Sounds/Weapons/SMG/V2Local1.opus");
 			@fireSounds[1] = dev.RegisterSound("Sounds/Weapons/SMG/V2Local2.opus");
 			@fireSounds[2] = dev.RegisterSound("Sounds/Weapons/SMG/V2Local3.opus");
 			@fireSounds[3] = dev.RegisterSound("Sounds/Weapons/SMG/V2Local4.opus");
 			@fireFarSound = dev.RegisterSound("Sounds/Weapons/SMG/FireFar.opus");
 			@fireStereoSound = dev.RegisterSound("Sounds/Weapons/SMG/FireStereo.opus");
+			@fireSmallReverbSounds[0] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall1.opus");
+			@fireSmallReverbSounds[1] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall2.opus");
+			@fireSmallReverbSounds[2] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall3.opus");
+			@fireSmallReverbSounds[3] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceSmall4.opus");
+			@fireLargeReverbSounds[0] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge1.opus");
+			@fireLargeReverbSounds[1] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge2.opus");
+			@fireLargeReverbSounds[2] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge3.opus");
+			@fireLargeReverbSounds[3] = dev.RegisterSound("Sounds/Weapons/SMG/V2AmbienceLarge4.opus");
 			@reloadSound = dev.RegisterSound("Sounds/Weapons/SMG/ReloadLocal.opus");
-
+			
+			// load images
 			@scopeImage = renderer.RegisterImage("Gfx/SMG.png");
 
 			raiseSpring.position = 1;
@@ -271,6 +273,12 @@ namespace spades {
 					? fireSmallReverbSounds[GetRandom(fireSmallReverbSounds.length)]
 					: fireLargeReverbSounds[GetRandom(fireLargeReverbSounds.length)],
 					origin, param);
+					
+				param.referenceDistance = 4.0F;
+                param.volume = 1.0F;
+                audioDevice.PlayLocal(fireFarSound, origin, param);
+                param.referenceDistance = 1.0F;
+                audioDevice.PlayLocal(fireStereoSound, origin, param);
 			}
 
 			recoilVerticalSpring.velocity += 0.75;
@@ -299,19 +307,22 @@ namespace spades {
 		Matrix4 GetViewWeaponMatrix() {
 			Matrix4 mat;
 
-			// sprint animation
-			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position) * mat;
-
-			// raise gun animation
-			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F) * mat;
-			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F) * mat;
-			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position) * mat;
-
 			float sp = 1.0F - AimDownSightStateSmooth;
 
+			// sprint animation
+			mat = CreateEulerAnglesMatrix(Vector3(0.3F, -0.1F, -0.55F) * sprintSpring.position * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.23F, -0.05F, 0.15F) * sprintSpring.position * sp) * mat;
+
+			// raise gun animation
+			mat = CreateRotateMatrix(Vector3(0, 0, 1), raiseSpring.position * -1.3F * sp) * mat;
+			mat = CreateRotateMatrix(Vector3(0, 1, 0), raiseSpring.position * 0.2F * sp) * mat;
+			mat = CreateTranslateMatrix(Vector3(0.1F, -0.3F, 0.1F) * raiseSpring.position * sp) * mat;
+
 			// recoil animation
-			Vector3 recoilRot = Vector3(-0.75, 0.3, 0.3) * recoilVerticalSpring.position;
+            Vector3 recoilRot(0, 0, 0);
+            recoilRot.x = -1.0F * recoilVerticalSpring.position;
+			recoilRot.y = 0.3F * recoilRotationSpring.position;
+			recoilRot.z = 0.3F * recoilRotationSpring.position;
 			Vector3 recoilOffset = Vector3(0, 0, -0.1) * recoilVerticalSpring.position * sp;
 			recoilOffset -= Vector3(0, 0.5, 0) * recoilBackSpring.position;
 			mat = CreateEulerAnglesMatrix(recoilRot * sp) * mat;
@@ -329,7 +340,7 @@ namespace spades {
 			mat = mat * CreateEulerAnglesMatrix(swingRot * sp);
 
 			Vector3 pivot = Vector3(0.05F, 0.0F, 0.05F);
-			Vector3 sightPos = (frontSightAttachment - pivot) * globalScale;
+			Vector3 sightPos = (frontSightAttachment - pivot) * globalScale;	
 			mat = AdjustToAlignSight(mat, sightPos, AimDownSightStateSmooth);
 			mat = AdjustToReload(mat);
 

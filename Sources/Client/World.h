@@ -59,8 +59,8 @@ namespace spades {
 			};
 			struct PlayerPersistent {
 				std::string name;
-				int kills;
-				PlayerPersistent() : kills(0) { ; }
+				int score;
+				PlayerPersistent() : score(0) { ; }
 			};
 
 		private:
@@ -108,6 +108,7 @@ namespace spades {
 			IntVector3 GetFogColor() { return fogColor; }
 			void SetFogColor(IntVector3 v) { fogColor = v; }
 
+			void UpdatePlayer(float dt, bool locked);
 			void Advance(float dt);
 
 			void AddGrenade(std::unique_ptr<Grenade>);
@@ -142,7 +143,7 @@ namespace spades {
 
 			PlayerPersistent& GetPlayerPersistent(int index);
 			std::string GetPlayerName(int index) { return GetPlayerPersistent(index).name; }
-			int GetPlayerScore(int index) { return GetPlayerPersistent(index).kills; }
+			int GetPlayerScore(int index) { return GetPlayerPersistent(index).score; }
 
 			void CreateBlock(IntVector3 pos, IntVector3 color);
 			void DestroyBlock(std::vector<IntVector3>& pos);
@@ -160,6 +161,7 @@ namespace spades {
 
 			size_t GetNumPlayerSlots() { return players.size(); }
 			size_t GetNumPlayers();
+			size_t GetNumPlayersAlive(int team);
 
 			stmp::optional<int> GetLocalPlayerIndex() { return localPlayerIndex; }
 			void SetLocalPlayerIndex(stmp::optional<int> p) { localPlayerIndex = p; }
