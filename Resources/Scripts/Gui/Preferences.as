@@ -67,7 +67,7 @@ namespace spades {
             }
 
             AddTab(GameOptionsPanel(Manager, options, fontManager), _Tr("Preferences", "Game Options"));
-            AddTab(RendererOptionsPanel(Manager, options, fontManager), _Tr("Preferences", "Renderer Settings"));
+            AddTab(RendererOptionsPanel(Manager, options, fontManager), _Tr("Preferences", "Graphics Settings"));
             AddTab(ControlOptionsPanel(Manager, options, fontManager), _Tr("Preferences", "Controls"));
             AddTab(MiscOptionsPanel(Manager, options, fontManager), _Tr("Preferences", "Misc"));
 
@@ -237,6 +237,21 @@ namespace spades {
             return s;
         }
         string Format(float value) { return prefix + FormatInternal(value); }
+    }
+
+	class ConfigFOVFormatter : ConfigNumberFormatter {
+        ConfigFOVFormatter() {
+            super(0, "");
+        }
+
+        string Format(float value) {
+            if (value == 68)
+                return _Tr("Preferences", "Default");
+            else if (value >= 110)
+                return _Tr("Preferences", "Quake Pro");
+            else
+                return ConfigNumberFormatter::Format(value);
+        }
     }
 
     class ConfigRenderScaleFormatter : ConfigNumberFormatter {
@@ -615,6 +630,7 @@ namespace spades {
         }
 
         private void OnRandomizePressed(spades::ui::UIElement@ sender) {
+			cg_targetColor.StringValue = cg_targetColor.DefaultValue; // reset
             cg_targetColorR.IntValue = GetRandom(0, 255);
             cg_targetColorG.IntValue = GetRandom(0, 255);
             cg_targetColorB.IntValue = GetRandom(0, 255);
@@ -643,6 +659,9 @@ namespace spades {
             Vector2 size = Size;
             Vector2 center = pos + size * 0.5F;
 
+			TargetParam param;
+			int targetType = cg_target.IntValue;
+
             IntVector3 col;
             switch (cg_targetColor.IntValue) {
                 case 1: col = IntVector3(250, 50, 50); break; // red
@@ -665,7 +684,7 @@ namespace spades {
             if (cg_target.BoolValue) {
                 float luminosity = color.x + color.y + color.z;
                 float opacity = 1.0F - luminosity;
-                if (cg_targetOutline.BoolValue and cg_target.IntValue == 2)
+                if (cg_targetOutline.BoolValue and targetType == 2)
                     r.ColorNP = Vector4(0.6F, 0.6F, 0.6F, 0.9F);
                 else
                     r.ColorNP = Vector4(opacity, opacity, opacity, 0.6F);
@@ -679,13 +698,12 @@ namespace spades {
             r.DrawOutlinedRect(pos.x, pos.y, pos.x + size.x, pos.y + size.y);
 
             // draw target
-            if (cg_target.IntValue == 1) { // draw default target
+            if (targetType == 1) { // draw default target
                 Image@ sightImage = r.RegisterImage("Gfx/Target.png");
                 Vector2 imgSize = Vector2(sightImage.Width, sightImage.Height);
                 r.ColorNP = color;
                 r.DrawImage(sightImage, center - (imgSize * 0.5F));
-            } else if (cg_target.IntValue == 2) { // draw custom target
-                TargetParam param;
+            } else if (targetType == 2) { // draw custom target
                 param.lineColor = color;
                 param.drawLines = cg_targetLines.BoolValue;
                 param.useTStyle = cg_targetTStyle.BoolValue;
@@ -786,6 +804,7 @@ namespace spades {
         }
 
         private void OnRandomizePressed(spades::ui::UIElement@ sender) {
+			cg_scopeColor.StringValue = cg_scopeColor.DefaultValue;
             cg_scopeColorR.IntValue = GetRandom(0, 255);
             cg_scopeColorG.IntValue = GetRandom(0, 255);
             cg_scopeColorB.IntValue = GetRandom(0, 255);
@@ -814,6 +833,9 @@ namespace spades {
             Vector2 size = Size;
             Vector2 center = pos + size * 0.5F;
 
+			TargetParam param;
+			int scopeType = cg_pngScope.IntValue;
+
             IntVector3 col;
             col.x = cg_scopeColorR.IntValue;
             col.y = cg_scopeColorG.IntValue;
@@ -823,14 +845,14 @@ namespace spades {
             color.w = Clamp(cg_scopeAlpha.IntValue, 0, 255) / 255.0F;
 
             // draw preview background
-            if (cg_pngScope.IntValue >= 2) {
+            if (scopeType >= 2) {
                 float luminosity = color.x + color.y + color.z;
                 float opacity = 1.0F - luminosity;
-                if (cg_scopeOutline.BoolValue and cg_pngScope.IntValue == 3)
+                if (cg_scopeOutline.BoolValue and scopeType == 3)
                     r.ColorNP = Vector4(0.6F, 0.6F, 0.6F, 0.9F);
                 else
                     r.ColorNP = Vector4(opacity, opacity, opacity, 0.6F);
-            } else if (cg_pngScope.IntValue < 2) {
+            } else if (scopeType < 2) {
                 r.ColorNP = Vector4(0.0F, 0.0F, 0.0F, 0.6F);
             }
             r.DrawImage(null, AABB2(pos.x, pos.y, size.x, size.y));
@@ -840,13 +862,12 @@ namespace spades {
             r.DrawOutlinedRect(pos.x, pos.y, pos.x + size.x, pos.y + size.y);
 
             // draw target
-            if (cg_pngScope.IntValue == 2) { // draw dot png scope
+            if (scopeType == 2) { // draw dot png scope
                 Image@ dotSightImage = r.RegisterImage("Gfx/DotSight.tga");
                 Vector2 imgSize = Vector2(dotSightImage.Width, dotSightImage.Height);
                 r.ColorNP = color;
                 r.DrawImage(dotSightImage, center - (imgSize * 0.5F));
-            } else if (cg_pngScope.IntValue == 3) { // draw custom target scope
-                TargetParam param;
+            } else if (scopeType == 3) { // draw custom target scope
                 param.lineColor = color;
                 param.drawLines = cg_scopeLines.BoolValue;
                 param.useTStyle = cg_scopeTStyle.BoolValue;
@@ -1183,10 +1204,24 @@ namespace spades {
 
             layouter.AddHeading(_Tr("Preferences", "Misc"));
             layouter.AddSliderField(_Tr("Preferences", "Field of View"), "cg_fov",
-            45, 90, 1, ConfigNumberFormatter(0, "°"));
+            45, 110, 1, ConfigFOVFormatter());
             layouter.AddToggleField(_Tr("Preferences", "Horizontal FOV"), "cg_horizontalFov");
             layouter.AddToggleField(_Tr("Preferences", "Classic Zoom"), "cg_classicZoom");
-            layouter.AddChoiceField(_Tr("Preferences", "Show Alive Player Count"), "cg_hudPlayerCount",
+            layouter.AddToggleField(_Tr("Preferences", "Debug Hit Detection"), "cg_debugHitTest");
+            layouter.AddSliderField(_Tr("Preferences", "Hit Test Debugger Size"), "cg_dbgHitTestSize",
+            64, 256, 8, ConfigNumberFormatter(0, "px"));
+            layouter.AddControl(_Tr("Preferences", "Toggle Hit Test Zoom"), "cg_keyToggleHitTestZoom");
+            layouter.AddToggleField(_Tr("Preferences", "Debug Weapon Spread"), "cg_debugAim");
+            layouter.AddToggleField(_Tr("Preferences", "Classic Viewmodel"), "cg_classicViewWeapon");
+            layouter.AddToggleField(_Tr("Preferences", "Classic Player Model"), "cg_classicPlayerModels");
+
+			layouter.AddHeading(_Tr("Preferences", "Heads-Up Display"));
+            layouter.AddToggleField(_Tr("Preferences", "Hide HUD"), "cg_hideHud");
+			layouter.AddChoiceField(_Tr("Preferences", "HUD Ammo Style"), "cg_hudAmmoStyle",
+                                    array<string> = {_Tr("Preferences", "NORMAL"),
+                                                     _Tr("Preferences", "SIMPLE")},
+                                    array<int> = {0, 1});
+			layouter.AddChoiceField(_Tr("Preferences", "Show Alive Player Count"), "cg_hudPlayerCount",
                                     array<string> = {_Tr("Preferences", "OFF"),
                                                      _Tr("Preferences", "Top"),
                                                      _Tr("Preferences", "Bottom")},
@@ -1197,16 +1232,22 @@ namespace spades {
                                                      _Tr("Preferences", "Bottom")},
                                     array<int> = {0, 2, 1});
             layouter.AddToggleField(_Tr("Preferences", "Show Player Statistics"), "cg_playerStats");
-            layouter.AddToggleField(_Tr("Preferences", "Show Placed Blocks"), "cg_playerStatsShowPlacedBlocks");
-            layouter.AddSliderField(_Tr("Preferences", "Player Statistics Height"), "cg_playerStatsHeight",
+			layouter.AddToggleField(_Tr("Preferences", "Show Placed Blocks"), "cg_playerStatsShowPlacedBlocks");
+            layouter.AddSliderGroup(_Tr("Preferences", "HUD Edge Positions"),
+            array<string> = { "cg_hudSafezoneX", "cg_hudSafezoneY"},
+            0.2, 1, 0.01, 2, array<string> = { "X: ", "Y: "});
+            layouter.AddSliderField(_Tr("Preferences", "HUD Color"), "cg_hudColor",
+            0, 10, 1, ConfigHUDColorFormatter());
+            layouter.AddRGBSlider(_Tr("Preferences", "Custom Color"),
+            array<string> = { "cg_hudColorR", "cg_hudColorG", "cg_hudColorB"});
+            layouter.AddSliderField(_Tr("Preferences", "Chat Height"), "cg_chatHeight",
+            10, 100, 1, ConfigNumberFormatter(0, "px"));
+            layouter.AddSliderField(_Tr("Preferneces", "Killfeed Height"), "cg_killfeedHeight",
+            10, 100, 1, ConfigNumberFormatter(0, "px"));
+			layouter.AddSliderField(_Tr("Preferences", "Player Statistics Height"), "cg_playerStatsHeight",
             0, 100, 1, ConfigNumberFormatter(0, "px"));
-            layouter.AddToggleField(_Tr("Preferences", "Debug Hit Detection"), "cg_debugHitTest");
-            layouter.AddSliderField(_Tr("Preferences", "Hit Test Debugger Size"), "cg_dbgHitTestSize",
-            64, 256, 8, ConfigNumberFormatter(0, "px"));
-            layouter.AddControl(_Tr("Preferences", "Toggle Hit Test Zoom"), "cg_keyToggleHitTestZoom");
-            layouter.AddToggleField(_Tr("Preferences", "Debug Weapon Spread"), "cg_debugAim");
-            layouter.AddToggleField(_Tr("Preferences", "Classic Viewmodel"), "cg_classicViewWeapon");
-            layouter.AddToggleField(_Tr("Preferences", "Default Player Models"), "cg_defaultPlayerModels");
+            layouter.AddToggleField(_Tr("Preferences", "Small HUD Font"),
+                "cg_smallFont", not options.GameActive);
 
             layouter.AddHeading(_Tr("Preferences", "Minimap"));
             layouter.AddSliderField(_Tr("Preferences", "Minimap Size"), "cg_minimapSize",
@@ -1219,22 +1260,6 @@ namespace spades {
                                                      _Tr("Preferences", "Side")},
                                     array<int> = {0, 1, 2});
             layouter.AddToggleField(_Tr("Preferences", "Show Player Names"), "cg_minimapPlayerNames");
-
-            layouter.AddHeading(_Tr("Preferences", "Heads-Up Display"));
-            layouter.AddToggleField(_Tr("Preferences", "Hide HUD"), "cg_hideHud");
-            layouter.AddSliderGroup(_Tr("Preferences", "HUD Edge Positions"),
-            array<string> = { "cg_hudSafezoneX", "cg_hudSafezoneY"},
-            0.2, 1, 0.01, 2, array<string> = { "X: ", "Y: "});
-            layouter.AddSliderField(_Tr("Preferences", "HUD Color"), "cg_hudColor",
-            0, 10, 1, ConfigHUDColorFormatter());
-            layouter.AddRGBSlider(_Tr("Preferences", "Custom Color"),
-            array<string> = { "cg_hudColorR", "cg_hudColorG", "cg_hudColorB"});
-            layouter.AddSliderField(_Tr("Preferences", "Chat Height"), "cg_chatHeight",
-            10, 100, 1, ConfigNumberFormatter(0, "px"));
-            layouter.AddSliderField(_Tr("Preferneces", "Killfeed Height"), "cg_killfeedHeight",
-            10, 100, 1, ConfigNumberFormatter(0, "px"));
-            layouter.AddToggleField(_Tr("Preferences", "Small HUD Font"),
-                "cg_smallFont", not options.GameActive);
 
             layouter.AddHeading(_Tr("Preferences", "Target"));
             layouter.AddTargetPreview();

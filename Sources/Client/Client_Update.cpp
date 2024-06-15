@@ -59,6 +59,7 @@ DEFINE_SPADES_SETTING(cg_hitAnalyze, "0");
 
 SPADES_SETTING(cg_centerMessage);
 SPADES_SETTING(cg_holdAimDownSight);
+SPADES_SETTING(cg_damageIndicators);
 
 namespace spades {
 	namespace client {
@@ -207,11 +208,11 @@ namespace spades {
 						playerInput = PlayerInput();
 						largeMapView->SetZoom(false);
 						chatWindow->SetExpanded(false);
+						scoreboardVisible = false;
 					}
 
 					// reset all "delayed actions"
 					reloadKeyPressed = false;
-					scoreboardVisible = false;
 					debugHitTestZoom = false;
 				}
 
@@ -533,8 +534,8 @@ namespace spades {
 			// show block count when building block lines.
 			if (player.IsAlive() && player.IsToolBlock() && player.IsBlockCursorDragging()) {
 				if (player.IsBlockCursorActive()) {
-					int blocks = static_cast<int>(world->CubeLine(
-						player.GetBlockCursorDragPos(), player.GetBlockCursorPos(), 64).size());
+					int blocks = world->CubeLineCount(player.GetBlockCursorDragPos(),
+					                                  player.GetBlockCursorPos());
 					auto msg = _TrN("Client", "{0} block", "{0} blocks", blocks);
 					auto type = (blocks > player.GetNumBlocks())
 						? AlertType::Warning : AlertType::Notice;
@@ -940,11 +941,11 @@ namespace spades {
 
 			// show big message if player is involved
 			if (&killer != &victim && (killer.IsLocalPlayer() || victim.IsLocalPlayer())) {
-				std::string msg;
+				std::string msg = "";
 				if (victim.IsLocalPlayer()) {
 					msg = _Tr("Client", "You were killed by {0}", killer.GetName());
 				} else if (cg_centerMessage == 2) {
-					msg = _Tr("Client", "You've killed {0}", victim.GetName());
+					msg = _Tr("Client", "You have killed {0}", victim.GetName());
 				}
 
 				if (!msg.empty())
@@ -959,10 +960,10 @@ namespace spades {
 
 			SPAssert(type != HitTypeBlock);
 
+			bool const byLocalPlayer = by.IsLocalPlayer();
+
 			// spatter blood
 			if ((int)cg_blood >= 2) {
-				bool const byLocalPlayer = by.IsLocalPlayer();
-
 				Vector3 dir = by.GetEye() - hitPos;
 				float dist = dir.GetLength();
 				dir = dir.Normalize();
@@ -1044,7 +1045,7 @@ namespace spades {
 					audioDevice->Play(c.GetPointerOrNull(), hitPos, param);
 				}
 
-				if (by.IsLocalPlayer() && type != HitTypeHead) {
+				if (byLocalPlayer && type != HitTypeHead) {
 					c = audioDevice->RegisterSound("Sounds/Feedback/HitFeedback.opus");
 					param.volume = cg_hitFeedbackSoundGain;
 					audioDevice->PlayLocal(c.GetPointerOrNull(), param);
@@ -1053,45 +1054,55 @@ namespace spades {
 				hitScanState.hasPlayedNormalHitSound = true;
 			}
 
-			if (by.IsLocalPlayer()) {
+			if (byLocalPlayer) {
 				net->SendHit(hurtPlayer.GetId(), type);
 
-				if (type != HitTypeMelee) {
+				if ((bool)cg_damageIndicators && type != HitTypeMelee) {
 					DamageIndicator damages;
 					damages.damage = by.GetWeapon().GetDamage(type);
 					damages.fade = 2.0F;
 					damages.position = hitPos;
 					damages.velocity = RandomAxis() * 4.0F;
+					damages.velocity.z = -2.0F;
 					damageIndicators.push_back(damages);
 				}
 
 				if ((bool)cg_hitAnalyze) {
 					char buf[256];
+					std::string s;
 
 					float dist = (by.GetEye() - hurtPlayer.GetEye()).GetLength();
-					float dt = (world->GetTime() - lastHitTime) * 1000;
+					sprintf(buf, "%.1f", dist);
+					s += buf;
 
-					std::string hitType;
-					switch (type) {
-						case HitTypeTorso: hitType = "Body"; break;
-						case HitTypeHead: hitType = "Head"; break;
-						case HitTypeArms:
-						case HitTypeLegs: hitType = "Limb"; break;
-						default: hitType = "Head"; break;
+					s = _Tr("Client", "You hit {0} from: {1} blocks ",
+						hurtPlayer.GetName(), s);
+
+					if ((int)cg_hitAnalyze >= 2) {
+						float dt = world->GetTime() - lastHitTime;
+						if (dt <= 0.0F) {
+							s += "dT: NA ";
+						} else {
+							if (dt > 1.0F)
+								sprintf(buf, "dT: %.0fs ", dt);
+							else
+								sprintf(buf, "dT: %dms ", (int)(dt * 1000));
+							s += buf;
+						}
 					}
 
-					std::string weapoName = by.IsToolSpade()
-						? "Melee" : by.GetWeapon().GetName();
+					s += "[";
+					switch (type) {
+						case HitTypeTorso: s += _Tr("Client", "TORSO"); break;
+						case HitTypeArms:
+						case HitTypeLegs: s += _Tr("Client", "LIMB"); break;
+						case HitTypeMelee: s += _Tr("Client", "MELEE"); break;
+						default: s += _Tr("Client", "HEAD"); break;
+					}
+					s += "]";
 
-					if (dt > 0.0F && lastHitTime > 0.0F)
-						sprintf(buf, "%s hit %s dist: %.1f blocks dT: %.0fms",
-							weapoName.c_str(), hitType.c_str(), dist, dt);
-					else
-						sprintf(buf, "%s hit %s dist: %.1f blocks dT: NA",
-							weapoName.c_str(), hitType.c_str(), dist);
-
-					scriptedUI->RecordChatLog(buf);
-					chatWindow->AddMessage(buf);
+					scriptedUI->RecordChatLog(s);
+					chatWindow->AddMessage(s);
 				}
 
 				if (type == HitTypeHead && !hitScanState.hasPlayedHeadshotSound) {

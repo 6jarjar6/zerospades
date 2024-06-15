@@ -149,20 +149,19 @@ namespace spades {
 		void Weapon::ReloadDone(int ammo, int stock) {
 			SPADES_MARK_FUNCTION_DEBUG();
 
+			// reload completion received from the server.
+			reloading = false;
+
+			// set new ammo and stock
 			this->ammo = ammo;
 			this->stock = stock;
 
-			// reload completion received from the server.
-			reloading = false;
-			if (IsReloadSlow() && !IsClipFull()) {
-				reloadStartTime = time;
-				reloadEndTime = time + GetReloadTime();
-				if (world.GetListener())
-					world.GetListener()->PlayerReloadingWeapon(owner);
-			} else {
-				if (world.GetListener())
-					world.GetListener()->PlayerReloadedWeapon(owner);
-			}
+			// handle shotgun reload
+			if (IsReloadSlow())
+				Reload();
+
+			if (world.GetListener() && IsClipFull())
+				world.GetListener()->PlayerReloadedWeapon(owner);
 		}
 
 		void Weapon::Reload() {
@@ -186,7 +185,7 @@ namespace spades {
 			reloadStartTime = time;
 			reloadEndTime = time + GetReloadTime();
 
-			if (world.GetListener() && !(ownerIsLocalPlayer && IsReloadSlow()))
+			if (world.GetListener())
 				world.GetListener()->PlayerReloadingWeapon(owner);
 		}
 

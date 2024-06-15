@@ -91,6 +91,8 @@ DEFINE_SPADES_SETTING(cg_debugCorpse, "0");
 SPADES_SETTING(cg_manualFocus);
 DEFINE_SPADES_SETTING(cg_keyAutoFocus, "MiddleMouseButton");
 
+DEFINE_SPADES_SETTING(cg_keyToggleSpectatorNames, "z");
+
 SPADES_SETTING(s_volume);
 SPADES_SETTING(cg_debugHitTest);
 
@@ -349,8 +351,7 @@ namespace spades {
 						volume = std::min(volume + 10, 100);
 
 					s_volume = volume;
-					auto volStr = "Volume: " + ToString(volume);
-					chatWindow->AddMessage(ChatWindow::ColoredMessage(volStr, MsgColorRed));
+					ShowAlert(_Tr("Client", "Volume: {0}%", volume), AlertType::Notice);
 				}
 
 				if (IsLimboViewActive()) {
@@ -448,6 +449,13 @@ namespace spades {
 								RemoveInvisibleCorpses();
 						}
 					}
+				} else {
+					if (CheckKey(cg_keyToggleSpectatorNames, name) && down) {
+						spectatorPlayerNames = !spectatorPlayerNames;
+						Handle<IAudioChunk> c =
+						  audioDevice->RegisterSound("Sounds/Player/Flashlight.opus");
+						audioDevice->PlayLocal(c.GetPointerOrNull(), AudioParam());
+					}
 				}
 
 				if (CheckKey(cg_keyMoveLeft, name)) {
@@ -482,7 +490,8 @@ namespace spades {
 				} else if (CheckKey(cg_keyAltAttack, name)) {
 					bool lastVal = weapInput.secondary;
 					if (p.IsToolWeapon() && !cg_holdAimDownSight) {
-						if (down && !p.GetWeapon().IsReloading())
+						Weapon& w = p.GetWeapon();
+						if (down && (!w.IsReloading() || w.IsReloadSlow()))
 							weapInput.secondary = !weapInput.secondary;
 					} else {
 						weapInput.secondary = down;

@@ -106,6 +106,7 @@ namespace spades {
 		      hitFeedbackFriendly(false),
 		      debugHitTestZoomState(0.0F),
 		      debugHitTestZoom(false),
+		      spectatorPlayerNames(true),
 		      focalLength(20.0F),
 		      targetFocalLength(20.0F),
 		      autoFocusEnabled(true),
@@ -164,6 +165,7 @@ namespace spades {
 			scoreboardVisible = false;
 			flashlightOn = false;
 			debugHitTestZoom = false;
+			largeMapView->SetZoom(false);
 
 			clientPlayers.clear();
 
@@ -538,7 +540,7 @@ namespace spades {
 
 		void Client::ShowAlert(const std::string& contents, AlertType type) {
 			if (!cg_alerts) {
-				chatWindow->AddMessage(contents);
+				chatWindow->AddMessage(ChatWindow::ColoredMessage(contents, MsgColorRed));
 				if (type != AlertType::Notice)
 					PlayAlertSound();
 				return;
@@ -685,10 +687,13 @@ namespace spades {
 					//! Crowdin warns that this string shouldn't be translated,
 					//! but it actually can be.
 					//! The extra whitespace is not a typo.
-					if (p.IsAlive())
+					if (p.IsAlive()) {
 						s = _Tr("Client", "[Global] ");
-					else
+						if (p.IsSpectator())
+							s = _Tr("Client", "*SPEC* ");
+					} else {
 						s = _Tr("Client", "*DEAD* ");
+				}
 				}
 				s += ChatWindow::TeamColorMessage(p.GetName(), p.GetTeamId());
 				s += ": ";
@@ -738,8 +743,15 @@ namespace spades {
 				if (cg_ignorePrivateMessages)
 					return;
 
-				std::string s = "PM from " + msg.substr(8);
-				chatWindow->AddMessage(ChatWindow::ColoredMessage(s, MsgColorGreen));
+				// play chat sound
+				if (!IsMuted()) {
+					Handle<IAudioChunk> c = audioDevice->RegisterSound("Sounds/Feedback/Chat.opus");
+					AudioParam params;
+					params.volume = (float)cg_chatBeep;
+					audioDevice->PlayLocal(c.GetPointerOrNull(), params);
+				}
+
+				chatWindow->AddMessage(ChatWindow::ColoredMessage(msg.substr(8), MsgColorGreen));
 				return;
 			}
 

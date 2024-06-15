@@ -917,11 +917,15 @@ namespace spades {
 					stmp::optional<IGameMode&> mode = GetWorld()->GetMode();
 					if (mode && mode->ModeType() == IGameMode::m_CTF) {
 						auto& ctf = dynamic_cast<CTFGameMode&>(mode.value());
+
+						CTFGameMode::Team& team1 = ctf.GetTeam(0);
+						CTFGameMode::Team& team2 = ctf.GetTeam(1);
+
 						switch (type) {
-							case BLUE_BASE: ctf.GetTeam(0).basePos = pos; break;
-							case BLUE_FLAG: ctf.GetTeam(0).flagPos = pos; break;
-							case GREEN_BASE: ctf.GetTeam(1).basePos = pos; break;
-							case GREEN_FLAG: ctf.GetTeam(1).flagPos = pos; break;
+							case BLUE_FLAG: team1.flagPos = pos; break;
+							case BLUE_BASE: team1.basePos = pos; break;
+							case GREEN_FLAG: team2.flagPos = pos; break;
+							case GREEN_BASE: team2.basePos = pos; break;
 						}
 					} else if (mode && mode->ModeType() == IGameMode::m_TC) {
 						auto& tc = dynamic_cast<TCGameMode&>(mode.value());
@@ -1076,43 +1080,43 @@ namespace spades {
 
 						int mode = r.ReadByte();
 						if (mode == CTFGameMode::m_CTF) { // CTF
-							auto mode = stmp::make_unique<CTFGameMode>();
+							auto ctf = stmp::make_unique<CTFGameMode>();
 
-							CTFGameMode::Team& mt1 = mode->GetTeam(0);
-							CTFGameMode::Team& mt2 = mode->GetTeam(1);
+							CTFGameMode::Team& team1 = ctf->GetTeam(0);
+							CTFGameMode::Team& team2 = ctf->GetTeam(1);
 
-							mt1.score = r.ReadByte();
-							mt2.score = r.ReadByte();
-							mode->SetCaptureLimit(r.ReadByte());
+							team1.score = r.ReadByte();
+							team2.score = r.ReadByte();
+							ctf->SetCaptureLimit(r.ReadByte());
 
 							int intelFlags = r.ReadByte();
-							mt1.hasIntel = (intelFlags & 1) != 0;
-							mt2.hasIntel = (intelFlags & 2) != 0;
+							team1.hasIntel = (intelFlags & 1) != 0;
+							team2.hasIntel = (intelFlags & 2) != 0;
 
-							if (mt2.hasIntel) {
-								mt1.carrierId = r.ReadByte();
+							if (team2.hasIntel) {
+								team2.carrierId = r.ReadByte();
 								r.ReadData(11);
 							} else {
-								mt1.flagPos = r.ReadVector3();
+								team1.flagPos = r.ReadVector3();
 							}
 
-							if (mt1.hasIntel) {
-								mt2.carrierId = r.ReadByte();
+							if (team1.hasIntel) {
+								team1.carrierId = r.ReadByte();
 								r.ReadData(11);
 							} else {
-								mt2.flagPos = r.ReadVector3();
+								team2.flagPos = r.ReadVector3();
 							}
 
-							mt1.basePos = r.ReadVector3();
-							mt2.basePos = r.ReadVector3();
+							team1.basePos = r.ReadVector3();
+							team2.basePos = r.ReadVector3();
 
-							GetWorld()->SetMode(std::move(mode));
+							GetWorld()->SetMode(std::move(ctf));
 						} else { // TC
-							auto mode = stmp::make_unique<TCGameMode>(*GetWorld());
+							auto tc = stmp::make_unique<TCGameMode>(*GetWorld());
 
 							int trNum = r.ReadByte();
 							for (int i = 0; i < trNum; i++) {
-								TCGameMode::Territory t{*mode};
+								TCGameMode::Territory t{*tc};
 								t.pos = r.ReadVector3();
 
 								int state = r.ReadByte();
@@ -1121,17 +1125,17 @@ namespace spades {
 								t.progressStartTime = 0.0F;
 								t.progressRate = 0.0F;
 								t.capturingTeamId = -1;
-								mode->AddTerritory(t);
+								tc->AddTerritory(t);
 							}
 
-							GetWorld()->SetMode(std::move(mode));
+							GetWorld()->SetMode(std::move(tc));
 						}
 						client->JoinedGame();
 					}
 					break;
 				case PacketTypeKillAction: {
-					Player& victim = GetPlayer(r.ReadByte());
-					Player* killer = &GetPlayer(r.ReadByte());
+					int victimId = r.ReadByte();
+					int killerId = r.ReadByte();
 					int kt = r.ReadByte();
 					int respawnTime = r.ReadByte();
 
@@ -1149,12 +1153,15 @@ namespace spades {
 					switch (type) {
 						case KillTypeFall:
 						case KillTypeTeamChange:
-						case KillTypeClassChange: killer = &victim; break;
+						case KillTypeClassChange: killerId = victimId; break;
 						default: break;
 					}
-					victim.KilledBy(type, *killer, respawnTime);
-					if (killer != &victim)
-						GetWorld()->GetPlayerPersistent(killer->GetId()).score++;
+
+					Player& victim = GetPlayer(victimId);
+					Player& killer = GetPlayer(killerId);
+					victim.KilledBy(type, killer, respawnTime);
+					if (killerId != victimId)
+						GetWorld()->GetPlayerPersistent(killerId).score++;
 				} break;
 				case PacketTypeChatMessage: {
 					// might be wrong player id for server message

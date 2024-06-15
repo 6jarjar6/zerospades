@@ -175,8 +175,7 @@ namespace spades {
 					} else {
 						if (blockCursorDragging) {
 							if (blockCursorActive) {
-								int blocks = static_cast<int>(world.CubeLine(
-									blockCursorDragPos, blockCursorPos, 64).size());
+								int blocks = world.CubeLineCount(blockCursorDragPos, blockCursorPos);
 								if (blocks <= blockStocks) {
 									if (listener)
 										listener->LocalPlayerCreatedLineBlock(blockCursorDragPos, blockCursorPos);
@@ -376,6 +375,8 @@ namespace spades {
 				const Handle<GameMap>& map = world.GetMap();
 				SPAssert(map);
 
+				int maxDepth = map->GroundDepth();
+
 				GameMap::RayCastResult mapResult;
 				mapResult = map->CastRay2(muzzle, dir, 12);
 
@@ -398,7 +399,9 @@ namespace spades {
 				if (mapResult.hit
 					&& InBuildRange(mapResult.hitBlock + mapResult.normal)
 					&& !OverlapsWithBlock(mapResult.hitBlock + mapResult.normal)
-					&&  map->IsValidBuildCoord(mapResult.hitBlock + mapResult.normal)
+					&& map->IsValidMapCoord(mapResult.hitBlock.x, mapResult.hitBlock.y, mapResult.hitBlock.z)
+					&& (mapResult.hitBlock + mapResult.normal).z >= 0
+					&& (mapResult.hitBlock + mapResult.normal).z < maxDepth
 					&& !pendingPlaceBlock) {
 					// Building is possible, and there's no delayed block placement.
 					blockCursorActive = true;
@@ -414,7 +417,8 @@ namespace spades {
 						lastSingleBlockBuildSeqDone = true;
 					} else if (InBuildRange(mapResult.hitBlock + mapResult.normal)
 						&& !OverlapsWithBlock(pendingPlaceBlockPos)
-						&& map->IsValidBuildCoord(pendingPlaceBlockPos)) {
+						&& map->IsValidMapCoord(pendingPlaceBlockPos.x, pendingPlaceBlockPos.y, pendingPlaceBlockPos.z)
+						&& pendingPlaceBlockPos.z < maxDepth) {
 						// now building became possible.
 						if (listener)
 							listener->LocalPlayerBlockAction(pendingPlaceBlockPos, BlockActionCreate);
@@ -429,7 +433,9 @@ namespace spades {
 					// is that block to be placed overlaps with the player's hitbox.
 					canPending = mapResult.hit
 						&& InBuildRange(mapResult.hitBlock + mapResult.normal)
-						&& map->IsValidBuildCoord(mapResult.hitBlock + mapResult.normal);
+						&& map->IsValidMapCoord(mapResult.hitBlock.x, mapResult.hitBlock.y, mapResult.hitBlock.z)
+						&& (mapResult.hitBlock + mapResult.normal).z >= 0
+						&& (mapResult.hitBlock + mapResult.normal).z < maxDepth;
 					blockCursorActive = false;
 
 					int dist = 11;
