@@ -48,7 +48,7 @@ jobs:
 
   build-macos:
     name: Build (macOS)
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
