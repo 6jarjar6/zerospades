@@ -28,7 +28,7 @@ jobs:
         run: vcpkg\vcpkg install @vcpkg_x86-windows.txt
 
       - name: Build application
-        uses: ashutoshvarma/action-cmake-build@master
+        uses: ashutoshvarma/action-cmake-build@ade188313bc7eaa6f14349569a64d8bc716342ff # master
         with:
           build-dir: ${{ runner.workspace }}\openspades.mk
           build-type: Release
@@ -70,7 +70,7 @@ jobs:
         run: vcpkg/vcpkg install @vcpkg_x86_64-darwin.txt
 
       - name: Build application
-        uses: ashutoshvarma/action-cmake-build@master
+        uses: ashutoshvarma/action-cmake-build@ade188313bc7eaa6f14349569a64d8bc716342ff # master
         with:
           build-dir: ${{ runner.workspace }}/openspades.mk
           build-type: RelWithDebInfo
